@@ -43,7 +43,7 @@ void EnumMemory(MYS mys)
 	MYS_MEMORY_HEADER *ptr = p_MemoryLinkFirst;
 	for (; ptr != NULL; ptr = ptr->pNext)
 	{
-		SmsMessage(mys, "MYS EnumMemory: %s Size: %zd byte", ptr->info, ptr->iSize);
+		MysMessage(mys, "MYS EnumMemory: %s Size: %zd byte", ptr->info, ptr->iSize);
 	}
 }
 
@@ -140,7 +140,7 @@ void MemoryFree(void *pMem)
 	free(ptr);
 }
 
-int iSmsParseString(MYS mys, char *pBuffer)
+int iMysParseString(MYS mys, char *pBuffer)
 {
 	char *cp_ptr = pBuffer;
 	char *utf8_ptr = nullptr;
@@ -168,7 +168,7 @@ int iSmsParseString(MYS mys, char *pBuffer)
 	return retv;
 }
 
-int SmsMainLoop(MYS mys)
+int MysMainLoop(MYS mys)
 {
 	MYSD *mysd = (MYSD *)mys;
 	char c_Buffer[MYS_MAX_STRING];
@@ -179,14 +179,14 @@ int SmsMainLoop(MYS mys)
 	do
 	{
 		if (((MYSD *)mys)->bPrompt)
-			printf("MYS> ");
+			printf("msh> ");
 		memset(c_Buffer, 0x00, MYS_MAX_STRING);
 		if (fgets(c_Buffer, 512, mysd->fpIn) != NULL /*&& setjmp(gc_Env) == false*/)
 		{
 			if (((MYSD *)mys)->bDebugMessage)
 				MYS_fprintf(MYS_stdout, "\t\t\t\t\t\t\tDBG [%d] %s", STACK_LEVEL(mys), c_Buffer);
 
-			retv = iSmsParseString(mys, c_Buffer);
+			retv = iMysParseString(mys, c_Buffer);
 
 			if (((MYSD *)mys)->bPrompt)
 			{
@@ -209,9 +209,9 @@ int SmsMainLoop(MYS mys)
 	return retv;
 }
 
-MYS pSmsInitialize()
+MYS pMysInitialize()
 {
-	MYSD *con = (MYSD *)MemoryAlloc(sizeof(MYSD), "pSmsInitialize", __LINE__);
+	MYSD *con = (MYSD *)MemoryAlloc(sizeof(MYSD), "pMysInitialize", __LINE__);
 	memset(con, 0, sizeof(MYSD));
 
 	con->iDictStackUsing = 1;
@@ -235,7 +235,7 @@ MYS pSmsInitialize()
 	return (MYS)con;
 }
 
-void SmsTerminate(MYS mys)
+void MysTerminate(MYS mys)
 {
 	MYSD *mysd = (MYSD *)mys;
 	TokenTerminate(mysd->pToken);
@@ -538,7 +538,7 @@ int iExecute(MYS mys)
 			((MYSD *)mys)->iOPStackUsing--;
 			if (((MYSD *)mys)->bDebugMessage)
 				MYS_fprintf(MYS_stdout, "\t\t\t\t\t\t\tDBG STRING[%d] %s\n", STACK_LEVEL(mys), Obj.un.pVar->un.pString);
-			retv = iSmsParseString(mys, Obj.un.pVar->un.pString);
+			retv = iMysParseString(mys, Obj.un.pVar->un.pString);
 			break;
 
 		case OTE_OPERATOR:
@@ -837,7 +837,7 @@ int iError(MYS mys, ERRORTYPE type, const char *filename, const int lineno, cons
 	return MYS_ERR;
 }
 
-void SmsMessage(
+void MysMessage(
 	MYS mys,
 	const char *format,
 	...)
@@ -852,7 +852,7 @@ void SmsMessage(
 	MYS_fprintf(MYS_stdout, " ##[MYS: %s]##\n", message);
 }
 
-void SmsHelp(MYS mys, const char *s1, const char *s2, const char *s3)
+void MysHelp(MYS mys, const char *s1, const char *s2, const char *s3)
 {
 	if (s2 && s3)
 		MYS_fprintf(MYS_stdout, "[%s] %s\n spec: %s\n", s1, s2, s3);
@@ -863,8 +863,8 @@ void SmsHelp(MYS mys, const char *s1, const char *s2, const char *s3)
 
 int main(int argc, char *argv[])
 {
-	MYS mys = pSmsInitialize();
-	SmsMainLoop(mys);
-	SmsTerminate(mys);
+	MYS mys = pMysInitialize();
+	MysMainLoop(mys);
+	MysTerminate(mys);
 	return 0;
 }

@@ -175,9 +175,9 @@ int iError(MYS mys, ERRORTYPE type, const char *file, int lineno, const char *op
 int iExecute(MYS mys);
 bool bObjCompare(MYS_OBJ *pObj1, MYS_OBJ *pObj2);
 
-int iSmsParseString(MYS mys, char *str);
-int SmsMainLoop(MYS mys);
-void SmsTerminate(MYS mys);
+int iMysParseString(MYS mys, char *str);
+int MysMainLoop(MYS mys);
+void MysTerminate(MYS mys);
 
 bool bRegistObjToDict(MYS mys, MYS_OBJ *pObjDict, MYS_OBJ *pObjName, MYS_OBJ *pObjValue);
 bool bTokenCompleted(MYS_TOKEN *pToken);
@@ -224,8 +224,8 @@ void PopDict(MYS mys);
 void ShowArray(MYS_OBJ *pObj);
 void ShowOPStack(MYS_OBJ *stack, int index);
 
-void SmsHelp(MYS mys, const char *s1, const char *s2, const char *s3);
-void SmsMessage(
+void MysHelp(MYS mys, const char *s1, const char *s2, const char *s3);
+void MysMessage(
 	MYS mys,
 	const char *format,
 	...);

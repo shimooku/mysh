@@ -436,7 +436,7 @@ int __opr_execfile(MYS mys)
 
 	((MYSD *)mys)->bPrompt = false;
 	((MYSD *)mys)->fpIn = fp;
-	int retv = SmsMainLoop(mys);
+	int retv = MysMainLoop(mys);
 	((MYSD *)mys)->fpIn = fpIn;
 	((MYSD *)mys)->bPrompt = bPrompt;
 
@@ -1932,7 +1932,7 @@ int __opr_help(MYS mys)
 
 		((MYSD *)mys)->iOPStackUsing--;
 
-		SmsHelp(mys, pObjValue->un.pOperator->pKeyName, pObjValue->un.pOperator->pOperatorParams, pObjValue->un.pOperator->pOperatorSpec);
+		MysHelp(mys, pObjValue->un.pOperator->pKeyName, pObjValue->un.pOperator->pOperatorParams, pObjValue->un.pOperator->pOperatorSpec);
 	}
 	return MYS_OK;
 }
@@ -2211,6 +2211,6 @@ void ShowDictOperators(MYS mys)
 {
 	for (int i = 0; _operators[i].pKeyName != NULL; i++)
 	{
-		SmsHelp(mys, (char *)_operators[i].pKeyName, (char *)_operators[i].pOperatorParams, (char *)_operators[i].pOperatorSpec);
+		MysHelp(mys, (char *)_operators[i].pKeyName, (char *)_operators[i].pOperatorParams, (char *)_operators[i].pOperatorSpec);
 	}
 }
