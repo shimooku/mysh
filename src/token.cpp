@@ -1,8 +1,8 @@
-﻿#include "simoscript.h"
+﻿#include "mysh.h"
 
-SMS_TOKEN *pTokenInitialize()
+MYS_TOKEN *pTokenInitialize()
 {
-	SMS_TOKEN *pToken = (SMS_TOKEN *)MemoryAlloc(sizeof(SMS_TOKEN), "pTokenInitialize", __LINE__);
+	MYS_TOKEN *pToken = (MYS_TOKEN *)MemoryAlloc(sizeof(MYS_TOKEN), "pTokenInitialize", __LINE__);
 	pToken->uLength = 0;
 	pToken->uBufferLength = 512;
 	pToken->pBuffer = (char *)MemoryAlloc(pToken->uBufferLength, "pTokenInitialize", __LINE__);
@@ -10,19 +10,19 @@ SMS_TOKEN *pTokenInitialize()
 	return pToken;
 }
 
-void TokenTerminate(SMS_TOKEN *pToken)
+void TokenTerminate(MYS_TOKEN *pToken)
 {
 	MemoryFree(pToken->pBuffer);
 	MemoryFree(pToken);
 }
 
-void TokenReset(SMS_TOKEN *pToken)
+void TokenReset(MYS_TOKEN *pToken)
 {
 	pToken->uLength = 0;
 	pToken->iNestString = 0;
 }
 
-void TokenPutchar(SMS_TOKEN *pToken, char Code)
+void TokenPutchar(MYS_TOKEN *pToken, char Code)
 {
 	if (pToken->uLength > pToken->uBufferLength)
 	{
@@ -33,7 +33,7 @@ void TokenPutchar(SMS_TOKEN *pToken, char Code)
 	pToken->pBuffer[pToken->uLength] = 0x00;
 }
 
-bool bTokenCompleted(SMS_TOKEN *pToken)
+bool bTokenCompleted(MYS_TOKEN *pToken)
 {
 	if (pToken->iNestString == 0)
 		return true;
@@ -41,21 +41,21 @@ bool bTokenCompleted(SMS_TOKEN *pToken)
 		return false;
 }
 
-unsigned int uTokenLength(SMS_TOKEN *pToken)
+unsigned int uTokenLength(MYS_TOKEN *pToken)
 {
 	return pToken->uLength;
 }
 
-char *pTokenBuffer(SMS_TOKEN *pToken)
+char *pTokenBuffer(MYS_TOKEN *pToken)
 {
 	return pToken->pBuffer;
 }
 
 static char gc_Separators[] = " {}[]()<>\n\t/%#;\\";
 
-char *pTokenFromString(SMS sms, char *cp_InStr)
+char *pTokenFromString(MYS mys, char *cp_InStr)
 {
-	SMS_TOKEN *pToken = ((SMSD *)sms)->pToken;
+	MYS_TOKEN *pToken = ((MYSD *)mys)->pToken;
 	char *cp_in = cp_InStr;
 	bool bFound = false;
 
@@ -165,7 +165,7 @@ char *pTokenFromString(SMS sms, char *cp_InStr)
 				}
 				else
 				{
-					iError(sms, INVALIDSEQUENCE, __func__, __LINE__, "Cannot use ')' without '('");
+					iError(mys, INVALIDSEQUENCE, __func__, __LINE__, "Cannot use ')' without '('");
 					return NULL;
 				}
 				break;
@@ -222,41 +222,41 @@ char *pTokenFromString(SMS sms, char *cp_InStr)
 	return cp_in;
 }
 
-void PushToken(SMS sms, char *c_Token)
+void PushToken(MYS mys, char *c_Token)
 {
-	char c_Buffer[SMS_MAX_STRING];
+	char c_Buffer[MYS_MAX_STRING];
 
-	if (((SMSD *)sms)->bDebugMessage)
-		SMS_fprintf(SMS_stdout, "\t\t\t\t\t\t\tDBG TOKEN[%d] %s\n", STACK_LEVEL(sms), c_Token);
+	if (((MYSD *)mys)->bDebugMessage)
+		MYS_fprintf(MYS_stdout, "\t\t\t\t\t\t\tDBG TOKEN[%d] %s\n", STACK_LEVEL(mys), c_Token);
 
 	switch (*c_Token)
 	{
 	case '(':
 		memcpy(c_Buffer, c_Token + 1, strlen(c_Token + 1));
 		c_Buffer[strlen(c_Token + 1) - 1] = 0x0;
-		PushString(sms, c_Buffer);
+		PushString(mys, c_Buffer);
 		break;
 	case '[':
-		PushMark(sms, false);
+		PushMark(mys, false);
 		break;
 	case '{':
-		((SMSD *)sms)->iNestExecArray++;
-		PushMark(sms, true);
+		((MYSD *)mys)->iNestExecArray++;
+		PushMark(mys, true);
 		break;
 	case '}':
-		if (((SMSD *)sms)->iNestExecArray > 0)
+		if (((MYSD *)mys)->iNestExecArray > 0)
 		{
-			((SMSD *)sms)->iNestExecArray--;
+			((MYSD *)mys)->iNestExecArray--;
 		}
 		else
 		{
-			SMS_fprintf(SMS_stdout, "** SMS ERROR: '}' is used without '{'\n");
+			MYS_fprintf(MYS_stdout, "** MYS ERROR: '}' is used without '{'\n");
 			return;
 		}
-		PushName(sms, true, c_Token);
+		PushName(mys, true, c_Token);
 		break;
 	case '/':
-		PushName(sms, false, c_Token + 1);
+		PushName(mys, false, c_Token + 1);
 		break;
 
 	case '-':
@@ -272,20 +272,20 @@ void PushToken(SMS sms, char *c_Token)
 	case '9':
 		if (strchr(c_Token, '.'))
 		{
-			PushReal(sms, atof(c_Token));
+			PushReal(mys, atof(c_Token));
 		}
 		else
 		{
-			PushInteger(sms, atoi(c_Token));
+			PushInteger(mys, atoi(c_Token));
 		}
 		break;
 
 	case '.':
-		PushReal(sms, atof(c_Token));
+		PushReal(mys, atof(c_Token));
 		break;
 
 	default: // name executable
-		PushName(sms, true, c_Token);
+		PushName(mys, true, c_Token);
 		break;
 	}
 }
