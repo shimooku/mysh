@@ -446,14 +446,25 @@ bool bGetString(MYS mys, MYS_OBJ *pObj, char **ppString, const char *pTitle)
 	return true;
 }
 
-void Pushboolean(MYS mys, long iInteger)
+void PushBool(MYS mys, long iInteger)
 {
 	MYSD *con = (MYSD *)mys;
 	MYS_OBJ *cur = con->OPStack + con->iOPStackUsing;
 
 	cur->bExecutable = false;
-	cur->ObjType = OTE_boolEAN;
+	cur->ObjType = OTE_BOOL;
 	cur->un.iInteger = iInteger;
+	con->iOPStackUsing++;
+}
+
+void PushFile(MYS mys, FILE *fp)
+{
+	MYSD *con = (MYSD *)mys;
+	MYS_OBJ *cur = con->OPStack + con->iOPStackUsing;
+
+	cur->bExecutable = false;
+	cur->ObjType = OTE_FILE;
+	cur->un.fp = fp;
 	con->iOPStackUsing++;
 }
 
@@ -633,7 +644,7 @@ bool bObjCompare(MYS_OBJ *pObj1, MYS_OBJ *pObj2)
 			if (strcmp(pObj1->un.pVar->un.pString, pObj2->un.pVar->un.pString) == 0)
 				bRet = true;
 			break;
-		case OTE_boolEAN:
+		case OTE_BOOL:
 		case OTE_INTEGER:
 			if (pObj1->un.iInteger == pObj2->un.iInteger)
 				bRet = true;
@@ -735,7 +746,7 @@ void ShowArray(MYS_OBJ *pObj)
 #endif
 			MYS_fprintf(MYS_stdout, "(%s)", pObj->un.pVar->un.pObjInArray[i].un.pVar->un.pString);
 			break;
-		case OTE_boolEAN:
+		case OTE_BOOL:
 			MYS_fprintf(MYS_stdout, "%s", (pObj->un.pVar->un.pObjInArray[i].un.iInteger == 1 ? "--true--" : "--false--"));
 			break;
 		case OTE_INTEGER:
@@ -777,7 +788,7 @@ void ShowOPStack(MYS_OBJ *stack, int index)
 	case OTE_NAME:
 		MYS_fprintf(MYS_stdout, "/%s\n", GET_NAME(stack));
 		break;
-	case OTE_boolEAN:
+	case OTE_BOOL:
 		MYS_fprintf(MYS_stdout, "%s\n", (GET_INTEGER(stack) == 1 ? "--true--" : "--false--"));
 		break;
 	case OTE_STRING:
@@ -811,6 +822,9 @@ void ShowOPStack(MYS_OBJ *stack, int index)
 	case OTE_DICTIONARY:
 		MYS_fprintf(MYS_stdout, "--dictionary--\n");
 		break;
+	case OTE_FILE:
+		MYS_fprintf(MYS_stdout, "--file--\n");
+		break;
 	}
 }
 
@@ -821,12 +835,15 @@ int iError(MYS mys, ERRORTYPE type, const char *filename, const int lineno, cons
 	if (opt1)
 	{
 		if (opt2)
-			MYS_fprintf(MYS_stdout, " ##[%s - %s %s @ %s(L%d)]##\n", _errtxt[type], opt1, opt2, fname, lineno);
+			// MYS_fprintf(MYS_stdout, " ##[%s - %s %s @ %s(L%d)]##\n", _errtxt[type], opt1, opt2, fname, lineno);
+			MYS_fprintf(MYS_stdout, " ##[%s - %s %s]##\n", _errtxt[type], opt1, opt2);
 		else
-			MYS_fprintf(MYS_stdout, " ##[%s - %s @ %s(L%d)]##\n", _errtxt[type], opt1, fname, lineno);
+			// MYS_fprintf(MYS_stdout, " ##[%s - %s @ %s(L%d)]##\n", _errtxt[type], opt1, fname, lineno);
+			MYS_fprintf(MYS_stdout, " ##[%s - %s]##\n", _errtxt[type], opt1);
 	}
 	else
-		MYS_fprintf(MYS_stdout, " ##[%s @ %s(L%d)]##\n", _errtxt[type], fname, lineno);
+		// MYS_fprintf(MYS_stdout, " ##[%s @ %s(L%d)]##\n", _errtxt[type], fname, lineno);
+		MYS_fprintf(MYS_stdout, " ##[%s]##\n", _errtxt[type]);
 
 	for (int i = 0; i < ((MYSD *)mys)->iOPStackUsing; i++)
 	{

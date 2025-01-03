@@ -51,7 +51,7 @@ char *pTokenBuffer(MYS_TOKEN *pToken)
 	return pToken->pBuffer;
 }
 
-static char gc_Separators[] = " {}[]()<>\n\t/%#;\\";
+static char gc_Separators[] = " {}[]()<>\n\t/%;\\";
 
 char *pTokenFromString(MYS mys, char *cp_InStr)
 {
@@ -191,7 +191,6 @@ char *pTokenFromString(MYS mys, char *cp_InStr)
 				}
 				break;
 
-			case '#':
 			case '%':
 			case ';':
 				if (pToken->iNestString)

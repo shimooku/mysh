@@ -48,7 +48,7 @@ int __opr_eq(MYS mys)
 
 	((MYSD *)mys)->iOPStackUsing -= 2;
 
-	Pushboolean(mys, bObjCompare(&Obj1, &Obj2));
+	PushBool(mys, bObjCompare(&Obj1, &Obj2));
 
 	return MYS_OK;
 }
@@ -65,7 +65,7 @@ int __opr_ne(MYS mys)
 
 	((MYSD *)mys)->iOPStackUsing -= 2;
 
-	Pushboolean(mys, !bObjCompare(&Obj1, &Obj2));
+	PushBool(mys, !bObjCompare(&Obj1, &Obj2));
 
 	return MYS_OK;
 }
@@ -249,20 +249,20 @@ static int _calculate(MYS mys, CALCULATE cal)
 			v2 = pObj2->un.dReal;
 		}
 	}
-	else if (pObj1->ObjType == OTE_boolEAN)
+	else if (pObj1->ObjType == OTE_BOOL)
 	{
-		if (pObj2->ObjType == OTE_boolEAN)
+		if (pObj2->ObjType == OTE_BOOL)
 		{
 			switch (cal)
 			{
 			case CAL_OR:
-				Pushboolean(mys, pObj1->un.iInteger | pObj2->un.iInteger);
+				PushBool(mys, pObj1->un.iInteger | pObj2->un.iInteger);
 				break;
 			case CAL_AND:
-				Pushboolean(mys, pObj1->un.iInteger & pObj2->un.iInteger);
+				PushBool(mys, pObj1->un.iInteger & pObj2->un.iInteger);
 				break;
 			case CAL_XOR:
-				Pushboolean(mys, pObj1->un.iInteger ^ pObj2->un.iInteger);
+				PushBool(mys, pObj1->un.iInteger ^ pObj2->un.iInteger);
 				break;
 			default:
 				OPSTACK_RESTORE(mys);
@@ -393,7 +393,7 @@ int __opr_debug(MYS mys)
 		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "debug");
 
 	MYS_OBJ Objboolean = *STACK_OBJ_LAST(mys, 0);
-	if (Objboolean.ObjType != OTE_boolEAN)
+	if (Objboolean.ObjType != OTE_BOOL)
 		return iError(mys, TYPECHECK, __func__, __LINE__, "debug");
 
 	((MYSD *)mys)->iOPStackUsing--;
@@ -452,7 +452,7 @@ int __opr_if(MYS mys)
 	MYS_OBJ Objboolean = *STACK_OBJ_LAST(mys, -1);
 	MYS_OBJ ObjProc = *STACK_OBJ_LAST(mys, 0);
 
-	if (Objboolean.ObjType != OTE_boolEAN)
+	if (Objboolean.ObjType != OTE_BOOL)
 		return iError(mys, TYPECHECK, __func__, __LINE__, "if");
 
 	if (ObjProc.ObjType != OTE_ARRAY || ObjProc.bExecutable == false)
@@ -477,7 +477,7 @@ int __opr_ifelse(MYS mys)
 	MYS_OBJ ObjProctrue = *STACK_OBJ_LAST(mys, -1);
 	MYS_OBJ ObjProcfalse = *STACK_OBJ_LAST(mys, 0);
 
-	if (Objboolean.ObjType != OTE_boolEAN)
+	if (Objboolean.ObjType != OTE_BOOL)
 		return iError(mys, TYPECHECK, __func__, __LINE__, "ifelse");
 
 	if (ObjProctrue.ObjType != OTE_ARRAY || ObjProctrue.bExecutable == false)
@@ -936,7 +936,7 @@ int __opr_true(MYS mys)
 {
 	((MYSD *)mys)->iOPStackUsing--;
 
-	Pushboolean(mys, 1);
+	PushBool(mys, 1);
 
 	return MYS_OK;
 }
@@ -954,7 +954,7 @@ int __opr_false(MYS mys)
 {
 	((MYSD *)mys)->iOPStackUsing--;
 
-	Pushboolean(mys, 0);
+	PushBool(mys, 0);
 
 	return MYS_OK;
 }
@@ -1263,8 +1263,10 @@ int __opr_print(MYS mys)
 	}
 
 	MYS_fprintf(MYS_stdout, "%s", GET_STRING(STACK_OBJ_LAST(mys, 0)));
+	fflush(MYS_stdout);
 
-	((MYSD *)mys)->iOPStackUsing--;
+	((MYSD *)mys)
+		->iOPStackUsing--;
 
 	return MYS_OK;
 }
@@ -1491,12 +1493,12 @@ int __opr_search(MYS mys)
 		PushString(mys, ObjSeek.un.pVar->un.pString);
 		*ptr = 0x00;
 		PushString(mys, tmp);
-		Pushboolean(mys, 1);
+		PushBool(mys, 1);
 	}
 	else
 	{
 		((MYSD *)mys)->iOPStackUsing--;
-		Pushboolean(mys, 0);
+		PushBool(mys, 0);
 	}
 
 	return MYS_OK;
@@ -1653,7 +1655,7 @@ int __opr_gt(MYS mys)
 		break;
 	}
 
-	Pushboolean(mys, n1 > n2 ? true : false);
+	PushBool(mys, n1 > n2 ? true : false);
 
 	return MYS_OK;
 }
@@ -1705,7 +1707,7 @@ int __opr_ge(MYS mys)
 		break;
 	}
 
-	Pushboolean(mys, n1 >= n2 ? true : false);
+	PushBool(mys, n1 >= n2 ? true : false);
 
 	return MYS_OK;
 }
@@ -1755,7 +1757,7 @@ int __opr_lt(MYS mys)
 		break;
 	}
 
-	Pushboolean(mys, n1 < n2 ? true : false);
+	PushBool(mys, n1 < n2 ? true : false);
 
 	return MYS_OK;
 }
@@ -1807,7 +1809,7 @@ int __opr_le(MYS mys)
 		break;
 	}
 
-	Pushboolean(mys, n1 <= n2 ? true : false);
+	PushBool(mys, n1 <= n2 ? true : false);
 
 	return MYS_OK;
 }
@@ -2036,12 +2038,12 @@ int __opr_getenv(MYS mys)
 	if (env)
 	{
 		PushString(mys, env);
-		Pushboolean(mys, 1);
+		PushBool(mys, 1);
 	}
 	else
 	{
 		PushString(mys, (char *)"");
-		Pushboolean(mys, 0);
+		PushBool(mys, 0);
 	}
 
 	return MYS_OK;
@@ -2086,9 +2088,195 @@ int __opr_messagebox(MYS mys)
 	mysd->iOPStackUsing -= 2;
 
 	if (retv == 0)
-		Pushboolean(mys, 1);
+		PushBool(mys, 1);
 	else
-		Pushboolean(mys, 0);
+		PushBool(mys, 0);
+
+	return MYS_OK;
+}
+
+int __opr_async(MYS mys)
+{
+	MYSD *mysd = (MYSD *)mys;
+
+	((MYSD *)mys)->iOPStackUsing--;
+	OPSTACK_SAVE(mys);
+
+	MYS_OBJ ObjToVar = *STACK_OBJ_LAST(mys, 0);
+
+	((MYSD *)mys)->iOPStackUsing -= 1;
+
+	if (ObjToVar.ObjType != OTE_ARRAY)
+		return iError(mys, TYPECHECK, __func__, __LINE__, "async");
+
+	std::string command;
+
+	MYS_OBJ *pObjInArray = ObjToVar.un.pVar->un.pObjInArray;
+	for (int i = 0; i < ObjToVar.un.pVar->iLength; i++)
+	{
+		command += GET_STRING(&pObjInArray[i]);
+		command += ' ';
+	}
+
+	try
+	{
+		std::future<void> future = std::async(
+			std::launch::async, [command]
+			{ std::system(command.c_str()); });
+		mysd->ayncTasks.push_back(std::move(future));
+		PushInteger(mys, mysd->ayncTasks.size() - 1);
+	}
+	catch (...)
+	{
+		return iError(mys, COMMAND_EXEC_ERROR, __func__, __LINE__, "async");
+	}
+
+	return MYS_OK;
+}
+
+int __opr_finished(MYS mys)
+{
+	MYSD *mysd = (MYSD *)mys;
+
+	((MYSD *)mys)->iOPStackUsing--;
+	OPSTACK_SAVE(mys);
+
+	if (((MYSD *)mys)->iOPStackUsing < 1)
+	{
+		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "wait");
+	}
+
+	MYS_OBJ Obj = *STACK_OBJ_LAST(mys, 0);
+
+	if (Obj.ObjType != OTE_INTEGER)
+		return iError(mys, TYPECHECK, __func__, __LINE__, "wait");
+
+	mysd->iOPStackUsing -= 1;
+
+	auto status = mysd->ayncTasks[GET_INTEGER(&Obj)].wait_for(std::chrono::milliseconds(500));
+
+	if (status == std::future_status::ready)
+		PushBool(mys, 1);
+	else
+		PushBool(mys, 0);
+
+	return MYS_OK;
+}
+
+int __opr_sleep(MYS mys)
+{
+	MYSD *mysd = (MYSD *)mys;
+
+	((MYSD *)mys)->iOPStackUsing--;
+	OPSTACK_SAVE(mys);
+
+	if (((MYSD *)mys)->iOPStackUsing < 1)
+	{
+		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "sleep");
+	}
+
+	MYS_OBJ Obj = *STACK_OBJ_LAST(mys, 0);
+
+	if (Obj.ObjType != OTE_INTEGER)
+		return iError(mys, TYPECHECK, __func__, __LINE__, "sleep");
+
+	mysd->iOPStackUsing -= 1;
+
+	sleep(GET_INTEGER(&Obj));
+
+	return MYS_OK;
+}
+
+int __opr_readfile(MYS mys)
+{
+	((MYSD *)mys)->iOPStackUsing--;
+	OPSTACK_SAVE(mys);
+
+	if (((MYSD *)mys)->iOPStackUsing < 1)
+	{
+		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "stdout");
+	}
+
+	MYS_OBJ ObjFileName = *STACK_OBJ_LAST(mys, 0);
+
+	if (ObjFileName.ObjType != OTE_NULL && ObjFileName.ObjType != OTE_STRING)
+		return iError(mys, TYPECHECK, __func__, __LINE__, "file");
+
+	((MYSD *)mys)->iOPStackUsing -= 1;
+
+	FILE *fp = nullptr;
+
+	if (ObjFileName.ObjType == OTE_STRING)
+		fp = fopen(GET_STRING(&ObjFileName), "r");
+	else
+		fp = nullptr;
+
+	PushFile(mys, fp);
+
+	return MYS_OK;
+}
+
+void setNonCanonicalMode(bool enable)
+{
+	static struct termios oldt, newt;
+
+	if (enable)
+	{
+		// 現在の端末設定を取得
+		tcgetattr(STDIN_FILENO, &oldt);
+		newt = oldt;
+
+		// 非カノニカルモードとエコー無効を設定
+		newt.c_lflag &= ~(ICANON | ECHO);
+
+		// 新しい設定を適用
+		tcsetattr(STDIN_FILENO, TCSANOW, &newt);
+	}
+	else
+	{
+		// 以前の設定を復元
+		tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+	}
+}
+
+int __opr_read(MYS mys)
+{
+	((MYSD *)mys)->iOPStackUsing--;
+	OPSTACK_SAVE(mys);
+
+	if (((MYSD *)mys)->iOPStackUsing < 1)
+	{
+		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "__opr_read");
+	}
+
+	MYS_OBJ ObjFile = *STACK_OBJ_LAST(mys, 0);
+
+	if (ObjFile.ObjType != OTE_FILE)
+		return iError(mys, TYPECHECK, __func__, __LINE__, "file");
+
+	((MYSD *)mys)->iOPStackUsing -= 1;
+
+	FILE *fp = GET_FILE(&ObjFile);
+
+	int ch;
+	if (fp == nullptr)
+	{
+		setNonCanonicalMode(true);
+		ch = getchar();
+		setNonCanonicalMode(false);
+	}
+	else
+	{
+		ch = fgetc(fp);
+	}
+
+	if (ch == EOF)
+		PushBool(mys, 0);
+	else
+	{
+		PushInteger(mys, ch);
+		PushBool(mys, 1);
+	}
 
 	return MYS_OK;
 }
@@ -2179,7 +2367,7 @@ static const MYS_OPERATOR _operators[] =
 
 		{"time", __opr_time, "- time <currenttime>", "Return tickcount"},
 		{"help", __opr_help, "- help -", "Show operator spec"},
-		{"stdout", __opr_stdout, "<string|null> stdout -", "Set where to output. <string> indicates filename and <null> indicates stdout"},
+		{"stdout", __opr_stdout, "<string|null> stdout --file--", "Set where to output. <string> indicates filename and <null> indicates stdout"},
 		{"debug", __opr_debug, "<bool> debug -", "Make mys debugmode"},
 		{"enummem", __opr_enummem, "- enummem -", "Enumrate memorystatus"},
 		{"checkmem", __opr_checkmem, "- checkmem -", "Check memory status"},
@@ -2191,6 +2379,13 @@ static const MYS_OPERATOR _operators[] =
 		{"prompt", __opr_prompt, "- prompt -", "Show 'MYS>'"},
 		{"quit", __opr_quit, "- quit -", "Quit from mys"},
 		{"messagebox", __opr_messagebox, "<string#1> <string#2> messagebox --true/false--", "shows a messagebox having the tile string#1, the message string#2 and Yes No bottoms, and returs true for yes, false for no."},
+
+		{"async", __opr_async, "[<command> <arg#1> <arg#2>... ] fork <pid>\n  [(ros2 pram set /speed_calc_node wheel_radius)(0.5)] fork", "asynchronous process execution. <pid> means process id, and the zero indicates failure."},
+		{"wait", __opr_finished, "<pid> finished <boolean>", "true for finished, false for still going"},
+		{"sleep", __opr_sleep, "<second> sleep -", ""},
+
+		{"readfile", __opr_readfile, "(filename) readfile --file--", ""},
+		{"read", __opr_read, "<file> read <int> <true> if not end-of-file\n<file> read <false> if end-of-file", ""},
 
 		{NULL, NULL, "", NULL}};
 

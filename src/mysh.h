@@ -11,6 +11,12 @@
 #include <limits.h>
 #include <glob.h>
 #include <math.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <vector>
+#include <string>
+#include <future>
+#include <termios.h>
 
 #define OPSTACK_SAVE(mys) int level = ((MYSD *)mys)->iOPStackUsing
 #define OPSTACK_RESTORE(mys) ((MYSD *)mys)->iOPStackUsing = level
@@ -28,14 +34,16 @@ typedef enum
 	OTE_NAME = 0,
 	OTE_STRING,
 	OTE_WIDESTRING,
-	OTE_boolEAN,
+	OTE_BOOL,
 	OTE_INTEGER,
 	OTE_REAL,
 	OTE_MARK,
 	OTE_ARRAY,
 	OTE_OPERATOR,
 	OTE_DICTIONARY,
-	OTE_NULL
+	OTE_NULL,
+	OTE_ASYNCTASK,
+	OTE_FILE
 } OBJ_TYPE_ENUM;
 
 typedef enum
@@ -85,6 +93,7 @@ typedef struct MYS_OBJ
 		const MYS_OPERATOR *pOperator;
 		MYS_VAR *pVar;
 		void *pData;
+		FILE *fp;
 	} un;
 } MYS_OBJ;
 
@@ -120,6 +129,7 @@ typedef struct
 	bool bDebugMessage;
 	char FontDir[256];
 	char ResDir[256];
+	std::vector<std::future<void>> ayncTasks;
 } MYSD;
 
 #define CURRENTDICT(mys) &((MYSD *)mys)->DictStack[((MYSD *)mys)->iDictStackUsing - 1]
@@ -131,6 +141,7 @@ typedef struct
 #define GET_STRING(obj) ((obj)->un.pVar->un.pString)
 #define GET_INTEGER(obj) ((obj)->un.iInteger)
 #define GET_REAL(obj) ((obj)->un.dReal)
+#define GET_FILE(obj) ((obj)->un.fp)
 
 #define STACK_LEVEL(mys) ((MYSD *)mys)->iOPStackUsing
 #define MARK_EXECUTABLE(obj) (obj.bExecutable)
@@ -154,7 +165,7 @@ typedef enum
 	RANGECHECK,
 	DICTSTACKUNDERFLOW,
 	NOTSUPPORTED,
-	PRINTPARAMMISMATCH,
+	COMMAND_EXEC_ERROR
 } ERRORTYPE;
 
 static const char *_errtxt[] =
@@ -168,7 +179,7 @@ static const char *_errtxt[] =
 		"rangecheck",
 		"dictstack-underflow",
 		"not-supported",
-		"print-param-mismatch",
+		"command execution error",
 };
 
 int iError(MYS mys, ERRORTYPE type, const char *file, int lineno, const char *opt1 = nullptr, const char *opt2 = nullptr);
@@ -215,9 +226,10 @@ void PushString(MYS mys, char *c_String);
 void PushName(MYS mys, bool b_Exec, char *c_String);
 void PushReal(MYS mys, double dReal);
 void PushInteger(MYS mys, long iInteger);
-void Pushboolean(MYS mys, long iInteger);
+void PushBool(MYS mys, long iInteger);
 void PushMark(MYS mys, bool bExec);
 void PushObj(MYS mys, MYS_OBJ *pObj);
+void PushFile(MYS mys, FILE *fp);
 void PushDict(MYS mys, MYS_OBJ *pObjDict);
 void PopDict(MYS mys);
 
