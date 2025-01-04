@@ -2,9 +2,7 @@
 
 独自開発のシェルスクリプト環境(Ubuntu版)
 
-長い間Windows版だけ作っていましたが、ROSを使った開発をしてみたくなったのをきっかけに、Linux事情をキャッチアップしようという事で、環境を作って
-
-> 必要に応じて継続的に機能拡張中
+ここ十年近くWindows環境でばかり開発をしてきたので、最近のLinuxでの開発環境を知るべく、これに取り組んでみました。
 
 ## ビルド方法
 
@@ -56,8 +54,8 @@ mysh/
 
 ### 基本
 
-* オペランドスタックにデータオブジェクトを載せて、コマンドオペレータを実行する形式
-* データオブジェクトには数値、名前、文字列、配列、手続き、ファイル、辞書がある
+* オペランドスタックにデータ[オブジェクト](#オブジェクトの種類)を載せて、コマンド[オペレータ](#オペレータの種類)を実行する形式
+* データ[オブジェクト](#オブジェクトの種類)には数値、名前、文字列、配列、手続き、ファイル、辞書がある
 * 変数の管理は辞書で行う
 * 辞書は複数作成でき、同じ変数名を複数辞書に違う値で登録することを許す
 * 辞書の検索順は辞書オブジェクトを載せる辞書スタックの順番に依存する
@@ -85,7 +83,7 @@ mysh/
 * Key=変数、Value=変数値という考え方で、辞書に登録する
 * Key-Valueペアの登録は`/key value def`
   * Keyは任意の文字列
-  * すべての[オブジェクト](#オブジェクト)がValueになり得る
+  * すべての[オブジェクト](#オブジェクトの種類)がValueになり得る
   * `def` は Key-Valueペアを登録するオペレータ
   ```
   /param#1 10 def                                            % 整数を代入
@@ -266,10 +264,9 @@ mysh/
     {exit}ifelse 
   } loop
   ```
-### 外部アプリ、コマンドとの連携
-* `async`
-* 下記のサンプルは [車輪ロボットを動かす3](https://github.com/shimooku/ros2_cpp_ws?tab=readme-ov-file#車輪ロボットを動かす3) で作成したロボットを`mysh`の`async`で制御するスクリプト
-
+### 外部コマンド(アプリ)との連携
+* 外部コマンドとの連携には、外部コマンドを呼び出す`async`と、実行した外部コマンドの終了を確認する`finished`を使用
+* 下記は[車輪ロボットを動かす3](https://github.com/shimooku/ros2_cpp_ws?tab=readme-ov-file#車輪ロボットを動かす3) で作成したロボットを`async`と`finished`で制御するスクリプト
   ```
   %% 外部向けコマンドをモディファイしやすいように複数に分割して配列に入れる
   %% 3番目の要素 (0.0) と5番目の要素 (0.0)を他の値に書き換えて、ロボットを前進、後退、左右回転させるようという目論見
@@ -283,34 +280,32 @@ mysh/
     (}}')                                                      %% 固定にする
   ]def
 
-  %% 外部コマンドを呼び出し、レスポンスが来るまで待つスクリプト
-  /exec_command 
+  %% 外部コマンドを呼び出し、レスポンスが来るまで待つコマンドを作成
+  /exec_command
   {
-    command async/pid exch def                  %% asyncでコマンド実行
-    {pid finished {exit}{2 sleep} ifelse }loop  %% finished で終了チェック, sleepで
+    async/pid exch def                          %% asyncでコマンド実行
+    {pid finished {exit}{2 sleep} ifelse }loop  %% finished で終了チェック, sleepでチェック頻度を調整
   } def
 
   %% キー入力検出した後のアクションを定義
-  %% 下記では単純に文字列を画面表示しているのみ
   /finish {(\nfinished\n) print exit} def
-  /forward { command 2 (1.0) put exec_command} def
-  /backward {command 2 (-1.0) put exec_command} def
-  /stop {command 2 (0.0) put command 4 (0.0) put exec_command} def
-  /left {command 4 (1.0) put exec_command} def
-  /right {command 4 (-1.0) put exec_command} def
+  /forward { command 2 (1.0) put command exec_command} def
+  /backward {command 2 (-1.0) put command exec_command} def
+  /stop {command 2 (0.0) put command 4 (0.0) put command exec_command} def
+  /left {command 4 (1.0) put command exec_command} def
+  /right {command 4 (-1.0) put command exec_command} def
   
   null readfile/file exch def %% null readfile によって標準入力をファイルオブジェクトに関連付け
-  1 string/buffer exch def
+  1 string/buffer exch def    %% 1文字コードを格納するバッファを準備
+
+  %% キー入力を検出し、文字コードによって動作を振り分け実行するループ
   {
-    %% 標準入力からのキー入力を検出して文字コードをスタックに載せる
-    %% readは文字入力を正常に検出したら、その「文字コード」と「true」をスタックにpushする
-    %% 失敗したら「false」をスタックにpushする
-    file read
+    file read  %% キー入力を検出し、成功すれば文字コードとtrueを、失敗すればfalseをスタックに載せる
     {
-      buffer 0 3 -1 roll put 
+      buffer 0 3 -1 roll put %% 文字コードをバッファに格納
+  
       %% 下記で押されたキーに応じた動作をコール
-      %% ifelseを使って記述すると処理が読みにくくなるので、ここでは敢えてifだけを使用
-      %% このため毎回全てのキーとの一致を試みるが、理解しやすさを優先する事とする
+      %% ifelseを使って記述すると処理がわかりにくなるので、ここでは敢えてifだけ使用
       buffer (q) eq {finish} if     %% q が押されたらループを抜ける
       buffer (w) eq {forward} if    %% w が押されたら 定義したforward手続きをコール
       buffer (s) eq {stop} if       %% s が押されたら 定義したstop手続きをコール
