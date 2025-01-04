@@ -2,6 +2,10 @@
 
 独自開発のシェルスクリプト環境(Ubuntu版)
 
+長い間Windows版だけ作っていましたが、ROSを使った開発をしてみたくなったのをきっかけに、Linux事情をキャッチアップしようという事で、環境を作って
+
+> 必要に応じて継続的に機能拡張中
+
 ## ビルド方法
 
 #### ファイル構成
@@ -23,13 +27,9 @@ mysh/
 2. `cmake ..`
 3. `make`
 
-以上で build/mysh を生成
-
 #### VSCodeでビルドする場合
 1. VSCodeのOpen Folderでmyshを開いてロードする
 2. VSCode画面下のステータスバーにあるBuildボタンを押す
-
-以上で build/mysh を生成
 
 ## 起動
 
@@ -185,36 +185,35 @@ mysh/
   year cvs print (\n) print
   month print (\n) print
   ```
-  上記スクリプトを実行すると、下記の出力が得られる。
+  上記スクリプトを実行すると、printコマンドによって下記の出力が得られる。
 
   ```
-  **MyDict
+  **MyDict         <== MyDict#1が辞書スタックの最上位
   2025
   jan
-  **MyDict
+  **MyDict         <== MyDict#2をbeginした事で最上位に
   3000
   dec
-  **MyDict
+  **MyDict         <== MyDict#2をendした事でMyDict#1が最上位に
   2025
   jan
-  **MyDict
+  **MyDict         <== MyDict#2をbeginした事でMyDict#2が最上位に
   3000
   dec
-  **
-   ##[undefined - year]##
+  **               <== MyDict#2をendした事でシステム辞書が最上位に
+   ##[undefined - year]## <== システム辞書にはyear変数を登録していないのでエラー
     0| /year
   ```
-  
 
 ### ファイル
 
-* スクリプトで処理したい任意のデータファイルをハンドリングする仕組みとして存在
+* 任意データファイルの読み込み処理をハンドリングする仕組みとして存在
 * キー入力に対応した動作を定義、実行したい場合にも使用
 
 #### ファイル読み込み
 
-* 読み込み対象のファイルのファイルパスを`readfile`に渡して`--file--`オブジェクトを生成
-* ファイルは開いた状態になるので、不要になったら`closefile`で開放する
+* 読み込み対象のファイルのファイルパスを`readfile`に渡して`--file--`オブジェクトを取得
+* `readfile`によってファイルは開いた状態になるので、不要になったら`closefile`で開放する
   ```
   (sample.txt) readfile/file exch def     %% カレントフォルダにある sample.txt を開く
   1 string/buffer exch def                %% 文字読み込み用バッファを確保
@@ -228,8 +227,9 @@ mysh/
 
 #### キー入力読み込み
 
-* `null`を`readfile`に渡して`file`オブジェクトを生成
-* `closefile`は実行してなくてもOK
+* `null`を`readfile`に渡して、標準入力用の`file`オブジェクトを生成
+  * 標準入力用の`file`は`closefile`を実行する必要なし
+* `file`が標準入力の場合、`file read`でキー入力を1文字ずつ検出
   ```
   %% キー入力検出した後のアクションを定義
   %% 下記では単純に文字列を画面表示しているのみ
@@ -262,24 +262,58 @@ mysh/
     {exit}ifelse 
   } loop
   ```
-
 ### 外部アプリ、コマンドとの連携
+* `async`
+* 下記のサンプルは [車輪ロボットを動かす3](https://github.com/shimooku/ros2_cpp_ws?tab=readme-ov-file#車輪ロボットを動かす3) で作成したロボットを`mysh`の`async`で制御するスクリプト
 
-* `async`で外部アプリ、コマンドを呼び出す
-* 
   ```
-  /start_proc {(\Start\n)print} def
-  /end_proc {(\Finish\n)print} def
+  /command
   [
-    (LIBGL_ALWAYS_SOFTWARE=1 zenity --question ) 
-    (--title=) 
-    ("CONFIRMATION") 
-    (--text=) 
-    ("YES to Start, NO to Finish")
-  ] async 
-  {start_proc}{end_proc}ifelse
-  ```
+  	(ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist )
+  	('{linear: {x: )
+  	(0.0)
+  	(, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: )
+  	(0.0)
+  	(}}')
+  ]def
+  
+  /exec_command 
+  {
+    command async/pid exch def
+    {pid finished {exit}{2 sleep} }loop
+  } def
 
+  %% キー入力検出した後のアクションを定義
+  %% 下記では単純に文字列を画面表示しているのみ
+  /finish {(\nfinished\n) print exit} def
+  /forward { command 2 (1.0) put exec_command} def
+  /backward {command 2 (-1.0) put exec_command} def
+  /stop {command 2 (0.0) put command 4 (0.0) put exec_command} def
+  /left {command 4 (1.0) put exec_command} def
+  /right {command 4 (-1.0) put exec_command} def
+  
+  null readfile/file exch def %% null readfile によって標準入力をファイルオブジェクトに関連付け
+  1 string/buffer exch def
+  {
+    %% 標準入力からのキー入力を検出して文字コードをスタックに載せる
+    %% readは文字入力を正常に検出したら、その「文字コード」と「true」をスタックにpushする
+    %% 失敗したら「false」をスタックにpushする
+    file read
+    {
+      buffer 0 3 -1 roll put 
+      %% 下記で押されたキーに応じた動作をコール
+      %% ifelseを使って記述すると処理が読みにくくなるので、ここでは敢えてifだけを使用
+      %% このため毎回全てのキーとの一致を試みるが、理解しやすさを優先する事とする
+      buffer (q) eq {finish} if     %% q が押されたらループを抜ける
+      buffer (w) eq {forward} if    %% w が押されたら 定義したforward手続きをコール
+      buffer (s) eq {stop} if       %% s が押されたら 定義したstop手続きをコール
+      buffer (x) eq {backward} if   %% x が押されたら 定義したbackwward手続きをコール
+      buffer (a) eq {left} if       %% a が押されたら 定義したleft手続きをコール
+      buffer (d) eq {right} if      %% d が押されたら 定義したright手続きをコール
+    }
+    {exit}ifelse 
+  } loop
+  ```
 
 ## オブジェクトの種類
 
