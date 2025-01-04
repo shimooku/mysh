@@ -280,7 +280,7 @@ mysh/
   /exec_command 
   {
     command async/pid exch def
-    {pid finished {exit}{2 sleep} }loop
+    {pid finished {exit}{2 sleep} ifelse }loop
   } def
 
   %% キー入力検出した後のアクションを定義

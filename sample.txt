@@ -1,50 +1,46 @@
-%% デフォルトで10個のKey-Valueペアを格納できる辞書を2つ作成
-10 dict /MyDict#1 exch def     
-10 dict /MyDict#2 exch def 
-%%                exch は先頭スタック入れ替え --dict-- /MyDict#1 ➔ /MyDict#1 --dict-- 
+  /command
+  [
+  	(ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist )
+  	('{linear: {x: )
+  	(0.0)
+  	(, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: )
+  	(0.0)
+  	(}}')
+  ]def
+  
+  /exec_command 
+  {
+    command async/pid exch def
+    {pid finished {exit}{2 sleep} ifelse }loop
+  } def
 
-%% MyDict#1を辞書スタックに載せる
-MyDict#1 begin
-  /year 2025 def
-  /month (jan) def
-  %% この時点で year = 2025, month = (jan) を記憶
-  %% 記憶情報を表示
-  (**MyDict\n) print
-  year cvs print (\n) print
-  month print (\n) print
-
-    %% MyDict#2を辞書スタックに載せる
-    MyDict#2 begin
-      /year 3000 def
-      /month (dec) def
-      %% この時点で year = 3000, month = (dec) を記憶
-      %% 記憶情報を表示
-      (**MyDict\n) print
-      year cvs print (\n) print
-      month print (\n) print
-    end %% MyDict#2を辞書スタックから外す
-
-  %% この時点で year = 2025, month = (jan) を思い出す
-  %% 記憶情報を表示
-  (**MyDict\n) print
-  year cvs print (\n) print
-  month print (\n) print
-
-end %% MyDict#1を辞書スタックから外す
-
-%% MyDict#2を辞書スタックに載せる
-MyDict#2 begin
-  /year 3000 def
-  /month (dec) def
-  %% この時点で year = 3000, month = (dec) を記憶
-  %% 記憶情報を表示
-  (**MyDict\n) print
-  year cvs print (\n) print
-  month print (\n) print
-end %% MyDict#2を辞書スタックから外す  
-
-%% この時点で year, monthが未定義に
-%% 記憶情報を表示
-(**\n) print
-year cvs print (\n) print
-month print (\n) print
+  %% キー入力検出した後のアクションを定義
+  %% 下記では単純に文字列を画面表示しているのみ
+  /finish {(\nfinished\n) print exit} def
+  /forward { command 2 (1.0) put exec_command} def
+  /backward {command 2 (-1.0) put exec_command} def
+  /stop {command 2 (0.0) put command 4 (0.0) put exec_command} def
+  /left {command 4 (0.5) put exec_command} def
+  /right {command 4 (-0.5) put exec_command} def
+  
+  null readfile/file exch def %% null readfile によって標準入力をファイルオブジェクトに関連付け
+  1 string/buffer exch def
+  {
+    %% 標準入力からのキー入力を検出して文字コードをスタックに載せる
+    %% readは文字入力を正常に検出したら、その「文字コード」と「true」をスタックにpushする
+    %% 失敗したら「false」をスタックにpushする
+    file read
+    {
+      buffer 0 3 -1 roll put 
+      %% 下記で押されたキーに応じた動作をコール
+      %% ifelseを使って記述すると処理が読みにくくなるので、ここでは敢えてifだけを使用
+      %% このため毎回全てのキーとの一致を試みるが、理解しやすさを優先する事とする
+      buffer (q) eq {finish} if     %% q が押されたらループを抜ける
+      buffer (w) eq {forward} if    %% w が押されたら 定義したforward手続きをコール
+      buffer (s) eq {stop} if       %% s が押されたら 定義したstop手続きをコール
+      buffer (x) eq {backward} if   %% x が押されたら 定義したbackwward手続きをコール
+      buffer (a) eq {left} if       %% a が押されたら 定義したleft手続きをコール
+      buffer (d) eq {right} if      %% d が押されたら 定義したright手続きをコール
+    }
+    {exit}ifelse 
+  } loop
