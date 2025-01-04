@@ -86,6 +86,7 @@ mysh/
 * Key-Valueペアの登録は`/key value def`
   * Keyは任意の文字列
   * すべての[オブジェクト](#オブジェクト)がValueになり得る
+  * `def` は Key-Valueペアを登録するオペレータ
   ```
   /param#1 10 def                                            % 整数を代入
   /param#2 3.14 def                                          % 実数を代入
@@ -116,13 +117,16 @@ mysh/
   ```
 ### 辞書
 
-* 辞書はKey-Valueペアを登録するもの
+* Key-Valueペアの登録先
+* 複数の辞書をハンドリングする機能を持つ
+  * [辞書スタック](#辞書スタック)
+  * 辞書をValueとして登録可
 
 #### 辞書スタック
 
-* 複数辞書の検索順位を決めるスタックで、最下層にmyshの定義を格納した[システム辞書](#システム辞書)が位置する
-* 辞書オブジェクトに対する`begin`によってその辞書が辞書スタックに積まれる
-* `end`によって辞書スタック最上位の辞書をpopする。これはpopされた辞書の内容が検索対象から外れる事を意味する。
+* 複数辞書を辞書スタックに積み、スタックの順番で検索順を決めている。最下層にはmyshの定義を格納した[システム辞書](#システム辞書)が位置している。
+* `dict`で作成した辞書オブジェクトに対して`begin`する事で、その辞書が辞書スタックに積まれる。
+* `end`によって辞書スタック最上位の辞書をpopする。これによってpopされた辞書は検索スコープから外れる。
 
 #### システム辞書
 
@@ -131,13 +135,13 @@ mysh/
 #### ユーザ定義辞書
 
 * `dict`で生成し，`begin`で辞書スタックに載せ、`end`で辞書スタックから外す
-* 検索は辞書スタックの上から下に向けて実施し、最初に見つかった値を採用する
-
+* 検索は辞書スタックの上から下に向けて行い、最初に見つかった値を採用する
+  * 例えば辞書スタック最上位の辞書にKey=Param, Value=0の登録があり、その下の辞書にKey=Param, Value=100の登録がある場合、Paramの検索結果は0になる。
+  * 以下はそのサンプル
   ```
   %% デフォルトで10個のKey-Valueペアを格納できる辞書を2つ作成
-  10 dict /MyDict#1 exch def     
+  10 dict /MyDict#1 exch def  %% exch は先頭スタック入れ替えるオペレータ
   10 dict /MyDict#2 exch def 
-  %%                exch は先頭スタック入れ替え --dict-- /MyDict#1 ➔ /MyDict#1 --dict-- 
 
   %% MyDict#1を辞書スタックに載せる
   MyDict#1 begin
@@ -145,8 +149,8 @@ mysh/
     /month (jan) def
     %% この時点で year = 2025, month = (jan) を記憶
     %% 記憶情報を表示
-    (**MyDict\n) print
-    year cvs print (\n) print
+    (**MyDict\n) print        %% print は文字列を表示するオペレータ
+    year cvs print (\n) print %% cvs は数値を文字列に変換するオペレータ
     month print (\n) print
 
       %% MyDict#2を辞書スタックに載せる
@@ -201,14 +205,14 @@ mysh/
   3000
   dec
   **               <== MyDict#2をendした事でシステム辞書が最上位に
-   ##[undefined - year]## <== システム辞書にはyear変数を登録していないのでエラー
-    0| /year
+   ##[undefined - year]##   <== システム辞書にはyear変数の登録はないので未定義エラー
+    0| /year                <== エラーが発生したらオペランドスタックのリストを表示する仕様
   ```
 
 ### ファイル
 
-* 任意データファイルの読み込み処理をハンドリングする仕組みとして存在
-* キー入力に対応した動作を定義、実行したい場合にも使用
+* 外部ファイルデータの取り込み、標準入力からのデータ取り込みの際に、ファイル名などを指定して`file`オブジェクトを作成し、それに対して`read`指示を行う。
+* readlineやファイル書き込み機能を追加する予定あり[TBD]
 
 #### ファイル読み込み
 
@@ -251,7 +255,7 @@ mysh/
       buffer 0 3 -1 roll put 
       %% 下記で押されたキーに応じた動作をコール
       %% ifelseを使って記述すると処理が読みにくくなるので、ここでは敢えてifだけを使用
-      %% このため毎回全てのキーとの一致を試みるが、理解しやすさを優先する事とする
+      %% この場合、毎回全てのキーとの一致を試みる事になる。
       buffer (q) eq {finish} if     %% q が押されたらループを抜ける
       buffer (w) eq {forward} if    %% w が押されたら 定義したforward手続きをコール
       buffer (s) eq {stop} if       %% s が押されたら 定義したstop手続きをコール
@@ -267,20 +271,23 @@ mysh/
 * 下記のサンプルは [車輪ロボットを動かす3](https://github.com/shimooku/ros2_cpp_ws?tab=readme-ov-file#車輪ロボットを動かす3) で作成したロボットを`mysh`の`async`で制御するスクリプト
 
   ```
+  %% 外部向けコマンドをモディファイしやすいように複数に分割して配列に入れる
+  %% 3番目の要素 (0.0) と5番目の要素 (0.0)を他の値に書き換えて、ロボットを前進、後退、左右回転させるようという目論見
   /command
   [
-  	(ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist )
-  	('{linear: {x: )
-  	(0.0)
-  	(, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: )
-  	(0.0)
-  	(}}')
+    (ros2 topic pub --once /cmd_vel geometry_msgs/msg/Twist )  %% 固定にする
+    ('{linear: {x: )                                           %% 固定にする
+    (0.0)                                                      %% 入れ替える
+    (, y: 0.0, z: 0.0}, angular: {x: 0.0, y: 0.0, z: )         %% 固定にする
+    (0.0)                                                      %% 入れ替える
+    (}}')                                                      %% 固定にする
   ]def
-  
+
+  %% 外部コマンドを呼び出し、レスポンスが来るまで待つスクリプト
   /exec_command 
   {
-    command async/pid exch def
-    {pid finished {exit}{2 sleep} ifelse }loop
+    command async/pid exch def                  %% asyncでコマンド実行
+    {pid finished {exit}{2 sleep} ifelse }loop  %% finished で終了チェック, sleepで
   } def
 
   %% キー入力検出した後のアクションを定義
