@@ -1,0 +1,50 @@
+%% デフォルトで10個のKey-Valueペアを格納できる辞書を2つ作成
+10 dict /MyDict#1 exch def     
+10 dict /MyDict#2 exch def 
+%%                exch は先頭スタック入れ替え --dict-- /MyDict#1 ➔ /MyDict#1 --dict-- 
+
+%% MyDict#1を辞書スタックに載せる
+MyDict#1 begin
+  /year 2025 def
+  /month (jan) def
+  %% この時点で year = 2025, month = (jan) を記憶
+  %% 記憶情報を表示
+  (**MyDict\n) print
+  year cvs print (\n) print
+  month print (\n) print
+
+    %% MyDict#2を辞書スタックに載せる
+    MyDict#2 begin
+      /year 3000 def
+      /month (dec) def
+      %% この時点で year = 3000, month = (dec) を記憶
+      %% 記憶情報を表示
+      (**MyDict\n) print
+      year cvs print (\n) print
+      month print (\n) print
+    end %% MyDict#2を辞書スタックから外す
+
+  %% この時点で year = 2025, month = (jan) を思い出す
+  %% 記憶情報を表示
+  (**MyDict\n) print
+  year cvs print (\n) print
+  month print (\n) print
+
+end %% MyDict#1を辞書スタックから外す
+
+%% MyDict#2を辞書スタックに載せる
+MyDict#2 begin
+  /year 3000 def
+  /month (dec) def
+  %% この時点で year = 3000, month = (dec) を記憶
+  %% 記憶情報を表示
+  (**MyDict\n) print
+  year cvs print (\n) print
+  month print (\n) print
+end %% MyDict#2を辞書スタックから外す  
+
+%% この時点で year, monthが未定義に
+%% 記憶情報を表示
+(**\n) print
+year cvs print (\n) print
+month print (\n) print

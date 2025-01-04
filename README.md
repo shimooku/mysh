@@ -1,9 +1,66 @@
 # mysh
 
+独自開発のシェルスクリプト環境(Ubuntu版)
+
+## ビルド方法
+
+#### ファイル構成
+```
+mysh/
+├── .vscode
+|   ├── launch.json
+|   └── settings.json
+├── CMakeLists.txt
+├── README.md
+└── src
+    ├── mysh.cpp
+    ├── mysh.h
+    ├── operators.cpp
+    └── token.cpp
+```
+#### ターミナルでビルドする場合
+1. ターミナルでmysh/buildに移動
+2. `cmake ..`
+3. `make`
+
+以上で build/mysh を生成
+
+#### VSCodeでビルドする場合
+1. VSCodeのOpen Folderでmyshを開いてロードする
+2. VSCode画面下のステータスバーにあるBuildボタンを押す
+
+以上で build/mysh を生成
+
+## 起動
+
+* myshを起動すると、すぐにコマンド入力モードに移行するが画面には何も表示しない。
+* 下記のようにコマンドを入力して改行すると
+  ```
+  (hello world\n) print ↵
+  hello world
+  ```
+* インタラクティブに操作する場合は、最初に`prompt`コマンドを実行して、プロンプト`msh> `を表示するのが良い
+  * インタラクティブモードではエラーが発生してもエラーを表示するだけでmyshは終了しない
+  ```
+  prompt
+  msh> 
+  msh> abc
+  ##[undefined - abc]##
+  0| /abc
+  ```
+  * 通常モードではコマンドエラー時にエラーを表示してmysh終了
+
 ## 言語仕様
 
-数値、名前、文字列、配列、手続き、ファイル、辞書と言った各種[オブジェクト](#オブジェクト)をスタックに載せ、各種[オペレータ](#オペレータ)を実行する形式で記述する。
-> Adobeが開発したPostScriptの基本仕様を参考にしている
+> Adobeが開発したPostScriptの言語仕様にほぼ準拠
+
+### 基本
+
+* オペランドスタックにデータオブジェクトを載せて、コマンドオペレータを実行する形式
+* データオブジェクトには数値、名前、文字列、配列、手続き、ファイル、辞書がある
+* 変数の管理は辞書で行う
+* 辞書は複数作成でき、同じ変数名を複数辞書に違う値で登録することを許す
+* 辞書の検索順は辞書オブジェクトを載せる辞書スタックの順番に依存する
 
 #### トークンのセパレータ
 
@@ -12,89 +69,260 @@
 
 * `%`または`;`以降の文字はコメントと見なす
 
-##### 足し算
+#### 足し算
 * 足し算１＋２を実行する場合
   * １と２を順番にオペランドスタックに積んだあとにaddというオペレータを実行するようにスクリプトを作成する。
   `1 2 add`
   * これを実行するとオペレータ`add`は必要なパラメータ`1`と`2`をスタックから取得して計算結果`3`をオペランドスタックに積む。
-  * スタックに積まれた`3`はスタック表示指示(`==`や`pstack`など)で表示
+  * スタックに積まれた`3`は必要に応じて`==`や`pstack`などの指示で画面表示
    ```
    msh> 1 2 add
    msh> ==
    3
    ```
-   ※ 上記で`msh>`はインタラクティブモード(アプリ起動後に`prompt`コマンドで遷移)で表示されるプロンプト
-##### 変数
-* 変数にはすべての[オブジェクト](#オブジェクト)を代入する事ができる。
-* 変数に値を代入する指示のシーケンスは `/key value def`
+
+### 変数と変数値
+* Key=変数、Value=変数値という考え方で、辞書に登録する
+* Key-Valueペアの登録は`/key value def`
+  * Keyは任意の文字列
+  * すべての[オブジェクト](#オブジェクト)がValueになり得る
   ```
-  /param#1 10 def
-  /param#2 3.14 def
-  /param#3 (sample string) def
-  /proc {param#1 param2 add} def
-  /array [1 2 param#2 (a) (b) (cdef) {(OK\n) print}] def
+  /param#1 10 def                                            % 整数を代入
+  /param#2 3.14 def                                          % 実数を代入
+  /param#3 (sample string) def                               % 文字列を代入
+  /param#4 {param#1 param#2 add} def                         % 手続き(実行配列)を代入
+  /param#5 [1 2 param#2 (a) (b) (cdef) {(OK\n) print}] def   % 配列を代入
+  /param#6 10 dict def                                       % 辞書を代入
+  /param#7 (/temp/sample.txt) readfile def                   % ファイルを代入
   ```
-* `/`を付けずに変数名を入力するとその値がスタックに乗る
+* `/`を付けずに変数名を入力するとその値がスタックに載る
   ```
-  msh> /param#1 10 def
-  msh> param#1 ==
+  msh> /param#1 10 def       % param#1というkeyに10を代入
+  msh> param#1               % param#1を呼び出すと10がスタックに積まれる
+  mah> ==                    % == はオペランドスタック最上位の値を表示してpopするコマンド
   10
   msh> /param#1 -9 def
   msh> param#1 ==
   -9
   ```
-* 変数は[辞書](#辞書)に登録する形式で、
+* 手続き(実行配列)型`{}`のオブジェクトは、スタックに載る瞬間にその手続きの内容を実行
+  ```
+  msh> /param#1 10 def
+  msh> /param#2 3.14 def
+  msh> /param#4 {param#1 param#2 mul} def   % param#4に手続きを代入
+  msh> param#4   % param#4を呼び出すと手続きがスタックに積まれる同時に実行。結果はスタックに。
+  mash ==        % == でオペランドスタック最上位の値を表示してpop
+  31.4
+  ```
+### 辞書
 
-## オブジェクト
+* 辞書はKey-Valueペアを登録するもの
+
+#### 辞書スタック
+
+* 複数辞書の検索順位を決めるスタックで、最下層にmyshの定義を格納した[システム辞書](#システム辞書)が位置する
+* 辞書オブジェクトに対する`begin`によってその辞書が辞書スタックに積まれる
+* `end`によって辞書スタック最上位の辞書をpopする。これはpopされた辞書の内容が検索対象から外れる事を意味する。
+
+#### システム辞書
+
+* myshがデフォルトで持っているコマンドや手続きを格納している辞書で`end`できない
+
+#### ユーザ定義辞書
+
+* `dict`で生成し，`begin`で辞書スタックに載せ、`end`で辞書スタックから外す
+* 検索は辞書スタックの上から下に向けて実施し、最初に見つかった値を採用する
+
+  ```
+  %% デフォルトで10個のKey-Valueペアを格納できる辞書を2つ作成
+  10 dict /MyDict#1 exch def     
+  10 dict /MyDict#2 exch def 
+  %%                exch は先頭スタック入れ替え --dict-- /MyDict#1 ➔ /MyDict#1 --dict-- 
+
+  %% MyDict#1を辞書スタックに載せる
+  MyDict#1 begin
+    /year 2025 def
+    /month (jan) def
+    %% この時点で year = 2025, month = (jan) を記憶
+    %% 記憶情報を表示
+    (**MyDict\n) print
+    year cvs print (\n) print
+    month print (\n) print
+
+      %% MyDict#2を辞書スタックに載せる
+      MyDict#2 begin
+        /year 3000 def
+        /month (dec) def
+        %% この時点で year = 3000, month = (dec) を記憶
+        %% 記憶情報を表示
+        (**MyDict\n) print
+        year cvs print (\n) print
+        month print (\n) print
+      end %% MyDict#2を辞書スタックから外す
+
+    %% この時点で year = 2025, month = (jan) を思い出す
+    %% 記憶情報を表示
+    (**MyDict\n) print
+    year cvs print (\n) print
+    month print (\n) print
+
+  end %% MyDict#1を辞書スタックから外す
+
+  %% MyDict#2を辞書スタックに載せる
+  MyDict#2 begin
+    /year 3000 def
+    /month (dec) def
+    %% この時点で year = 3000, month = (dec) を記憶
+    %% 記憶情報を表示
+    (**MyDict\n) print
+    year cvs print (\n) print
+    month print (\n) print
+  end %% MyDict#2を辞書スタックから外す  
+
+  %% この時点で year, monthが未定義に
+  %% 記憶情報を表示
+  (**\n) print
+  year cvs print (\n) print
+  month print (\n) print
+  ```
+  上記スクリプトを実行すると、下記の出力が得られる。
+
+  ```
+  **MyDict
+  2025
+  jan
+  **MyDict
+  3000
+  dec
+  **MyDict
+  2025
+  jan
+  **MyDict
+  3000
+  dec
+  **
+   ##[undefined - year]##
+    0| /year
+  ```
+  
+
+### ファイル
+
+* スクリプトで処理したい任意のデータファイルをハンドリングする仕組みとして存在
+* キー入力に対応した動作を定義、実行したい場合にも使用
+
+#### ファイル読み込み
+
+* 読み込み対象のファイルのファイルパスを`readfile`に渡して`--file--`オブジェクトを生成
+* ファイルは開いた状態になるので、不要になったら`closefile`で開放する
+  ```
+  (sample.txt) readfile/file exch def     %% カレントフォルダにある sample.txt を開く
+  1 string/buffer exch def                %% 文字読み込み用バッファを確保
+  {                                       %% ファイル終端までのloop
+	  file read                             %% ファイルから1文字読み込む(終端に達したらfalseを返す)
+	  {buffer 0 3 -1 roll put buffer print} %% 取得した文字コードをバッファに格納
+	  {(\nEOF\n) print exit}ifelse          %% readがfalseを返したらファイル終端
+  } loop
+  file closefile                          %% ファイルを閉じて開放
+  ```
+
+#### キー入力読み込み
+
+* `null`を`readfile`に渡して`file`オブジェクトを生成
+* `closefile`は実行してなくてもOK
+  ```
+  %% キー入力検出した後のアクションを定義
+  %% 下記では単純に文字列を画面表示しているのみ
+  /finish {(\nfinished\n) print exit} def
+  /forward {(forward\n) print } def
+  /backward {(backward\n) print } def
+  /stop {(stop\n) print } def
+  /left {(left\n) print } def
+  /right {(right\n) print } def
+
+  null readfile/file exch def %% null readfile によって標準入力をファイルオブジェクトに関連付け
+  1 string/buffer exch def
+  {
+    %% 標準入力からのキー入力を検出して文字コードをスタックに載せる
+    %% readは文字入力を正常に検出したら、その「文字コード」と「true」をスタックにpushする
+    %% 失敗したら「false」をスタックにpushする
+    file read
+    {
+      buffer 0 3 -1 roll put 
+      %% 下記で押されたキーに応じた動作をコール
+      %% ifelseを使って記述すると処理が読みにくくなるので、ここでは敢えてifだけを使用
+      %% このため毎回全てのキーとの一致を試みるが、理解しやすさを優先する事とする
+      buffer (q) eq {finish} if     %% q が押されたらループを抜ける
+      buffer (w) eq {forward} if    %% w が押されたら 定義したforward手続きをコール
+      buffer (s) eq {stop} if       %% s が押されたら 定義したstop手続きをコール
+      buffer (x) eq {backward} if   %% x が押されたら 定義したbackwward手続きをコール
+      buffer (a) eq {left} if       %% a が押されたら 定義したleft手続きをコール
+      buffer (d) eq {right} if      %% d が押されたら 定義したright手続きをコール
+    }
+    {exit}ifelse 
+  } loop
+  ```
+
+### 外部アプリ、コマンドとの連携
+
+* `async`で外部アプリ、コマンドを呼び出す
+* 
+  ```
+  /start_proc {(\Start\n)print} def
+  /end_proc {(\Finish\n)print} def
+  [
+    (LIBGL_ALWAYS_SOFTWARE=1 zenity --question ) 
+    (--title=) 
+    ("CONFIRMATION") 
+    (--text=) 
+    ("YES to Start, NO to Finish")
+  ] async 
+  {start_proc}{end_proc}ifelse
+  ```
+
+
+## オブジェクトの種類
 
 |オブジェクト|説明|
 |---|---|
 |Boolean|true, false|
 |整数|-2, -1, 0, 1, 2, ...|
 |浮動小数|-1.0, -20., 0.0, 1.0, 2.0, ...|
-|配列開始マーク"["|オペランドスタックに配列要素を積む直前の配列開始マーク|
-|[リテラル名](# リテラル名と検索名)|/ABC, /abc, /Abc, ....|
+|配列開始マーク|オペランドスタックに配列要素を積む直前の配列開始マーク`[`|
+|[リテラル名](#リテラル配列と実行配列手続き)|/ABC, /abc, /Abc, ....|
 |[検索名](# リテラル名と検索名)|ABC, abc, Abc, ....|
 |文字列|(ABC), (abc), (Abc), ...|
-|[リテラル配列](# リテラル配列と実行配列) array|[1 2 3], [(a) (b) (cd)], [(abc) [10 0.2] /cc], ...|
-|[実行配列](# リテラル配列と実行配列) proc|{1 2 3}, {(a) (b) (cd)}, {(abc) [10 0.2] /cc}, ...|
-|空オブジェクト"null"|10 arrayの操作で生成される配列の初期要素などで使用|
-|辞書| Key-Valueのペアの集合|
-|ファイル||
+|[リテラル配列](# リテラル配列と実行配列)|[1 2 3], [(a) (b) (cd)], [(abc) [10 0.2] /cc], ...|
+|[実行配列](# リテラル配列と実行配列)|{1 2 3}, {(a) (b) (cd)}, {(abc) [10 0.2] /cc}, ...|
+|空オブジェクト|`null`でスタックに積む。表示は`--nulll--`。|
+|辞書|Key-Valueのペアの集合。複数作成可。辞書をValueにする事も可。|
+|ファイル|`readfile`で開いたファイルを識別するオブジェクト|
 
 ### リテラル名と検索名
 
-リテラル名はスタック上にリテラル名オブジェクトとして積まれる一方で，検索名は辞書検索結果がスタック上に積まれる。例えば /ABC (abc) def の登録がある場合，/ABC ⇨ /ABC となり ABC ⇨ (abc) となる。検索名による検索結果が実行配列の場合，スタックに積まれた実行配列は即実行される。
+* リテラル名はスタック上にリテラル名オブジェクトとして積まれる一方で，検索名は辞書検索結果がスタック上に積まれる。
+* 例えば /ABC (abc) def の登録がある場合，/ABC ⇨ /ABC となり ABC ⇨ (abc) となる。
+* 検索名による検索結果が実行配列の場合，スタックに積まれた実行配列は即実行される。
 
 ### リテラル配列と実行配列(手続き)
 
-リテラル配列操作では [ 1 2 add] ⇨ [ 3 ] となり，'['と']'の間の操作は直ぐに実行される。以降これを`array`と表記する。
-一方で，実行配列操作では { 1 2 add } ⇨ { 1 2 add } となり，'{'と'}'の間の操作は直ぐに実行されない。以降これを`proc`と表記する。なお実行配列`proc`は，検索結果のValueとしてスタックに積まれたら即実行される。
+#### リテラル配列を作成する操作
+* `[ 1 2 add]` の入力結果は `[ 3 ]` となり，`[`と`]`の間は直ぐに実行
+#### 実行配列(手続き)を作成する操作
+* `{ 1 2 add }` の入力結果は `{ 1 2 add }` となり，`{`と`}`の間は実行されずそのまま記録
+* 実行配列は，検索結果のValueとしてスタックに積まれる即実行
 
-### 辞書
-
-* Key-Valueペアが登録されている複合オブジェクトを辞書と呼ぶ。辞書にはシステム辞書（TOSが定義したKeyValueペア群）と，ユーザ定義辞書（ユーザがTOSスクリプトで定義するKeyValueペア群）の2種類があり，ユーザ定義辞書は明示的に作成（`dict`オペレータで生成し，`begin`オペレータで辞書スタックに載せる）しない限り有効にならない。        
-* 使いたい辞書（KeyValueペアを登録辞書／検索対象にしたい辞書）は`begin`オペレータで辞書スタックに載せる必要がある。
-* 登録は，辞書スタックの最上位の辞書に対して行う。
-* 検索は，辞書スタックの最上位から最下位まで，該当するKeyが見つかるまで行う。
-* `end`オペレータは，辞書スタック最上位の辞書を外す処理を行う。また，辞書スタックから外れた辞書は，Valueとして登録されている限り，`begin`オペレータで何度も辞書スタックに戻すことが出来る。
-* システム辞書は辞書スタックから外すことは出来ない。
-
-### ファイル
-
-* 
-
-## オペレータ
+## オペレータの種類
 
 ### ヘルプ
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`help`|コマンド仕様表示|/dup `help`|標準出力にdupコマンド仕様を表示|
+|オペレータ|説明|パラメータ|結果|
+|--:|:-|:--|:--|
+|**help**|コマンド仕様表示|コマンドのリテラル名 /dup **help**|標準出力にコマンド仕様を表示|
 
 ### 演算
-|オペレータ|説明|使用例|結果|
+|オペレータ|説明|パラメータ|結果|
 |--:|:-|--:|:--|
-|`add`|加算|1 2 `add`|3|
+|`add`|加算|1 2 **add** *3*|3|
 |`sub`|減算|5 2 `sub`|3|
 |`mul`|積算|5 2 `mul`|10|
 |`div`|除算|5 2 `div`|2|
@@ -176,8 +404,8 @@
 |--:|:-|--:|:--|
 |`begin`|指定辞書を辞書スタック先頭に載せてカレント辞書にする|`10 dict begin`|*--dict--*|
 |`def`|辞書登録|`/Name (value) def`|カレント辞書にNameという名前で文字列(value)を登録|
-|`end`|カレント辞書を閉じる|--dict-- `end`|辞書スタック先頭の辞書をPOPしてその下の辞書をカレント辞書にする|
-|`dict`|辞書を作成する|10 `dict`|*--dict--*|
+|`end`|カレント辞書を閉じる|`end`|辞書スタック先頭の辞書をPOPしてその下の辞書をカレント辞書にする|
+|`dict`|デフォルトで指定した数のKey-Valueペアを格納できる辞書を作成する。その数を超える事は出来るがreallocが走るので少し遅くなる。|10 `dict`|*--dict--*|
 |`currentdict`|辞書スタックの先頭にある辞書をスタックに載せる|`currentdict`|*--dict--* |
 |`load`|カレント辞書に登録されているValueをスタックに載せる|/Name (value) def /Name `load`|(value) |
 |`put`||3 dict dup /ABC (abc) `put` begin /ABC load|(abc)|
@@ -227,18 +455,20 @@
 ### 計測
 |オペレータ|説明|使用例|結果|
 |--:|:-|--:|:--|
-|`tickcount`||- `tickcount`| *--num--* as time in msec                                    |
+|`tickcount`|msecオーダのTick Count|- `tickcount`| *--num--* as time in msec                                    |
 
 ### 日時
 |オペレータ|説明|使用例|結果|
 |--:|:-|--:|:--|
 |`time`||- `time`|*--string--* like (2021/12/20@12:00:00)|
 
-### 標準出力
+### ファイル
 |オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`stdout`|*--string--* \| *--null--* `stdout`|(/temp/poi.log) `stdout`| 指定ファイルに標準出力 |
-|||null `stdout`|画面に標準出力|
+|--:|:-|:--|:--|
+|readfile|読み込みファイルを開く|(filename) **readfile** *--file--*<br/>null **readfile** *--file--*|ファイル入力<br/>標準入力|
+
+		{"read", __opr_read, "<file> read <int> <true> if not end-of-file\n<file> read <false> if end-of-file", ""},
+		{"closefile", __opr_closefile, "--file-- closefile -", ""},
 
 ### メモリチェック
 |オペレータ|説明|使用例|結果|
@@ -260,8 +490,6 @@
 |`sleep`|処理を指定秒停止 |10秒停止 `10 sleep`|なし|
 |`quit`|TOS終了|`quit`|なし|
 
-### コメント
-* 行内で `%`, `#`, `;` 以降の文字列は無視する
 
 
 

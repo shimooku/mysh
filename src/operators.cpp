@@ -12,6 +12,7 @@ int __opr_pstack(MYS mys)
 		MYS_fprintf(MYS_stdout, "%3d| ", i);
 		ShowOPStack(&((MYSD *)mys)->OPStack[i], i);
 	}
+	fflush(MYS_stdout);
 
 	return MYS_OK;
 }
@@ -1232,6 +1233,19 @@ int __opr_get(MYS mys)
 	return MYS_OK;
 }
 
+int __opr_tickcount(MYS mys)
+{
+	((MYSD *)mys)->iOPStackUsing--;
+
+	auto now = std::chrono::high_resolution_clock::now();
+
+	// 時間をミリ秒単位に変換
+	auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch());
+	PushInteger(mys, duration.count());
+
+	return MYS_OK;
+}
+
 int __opr_time(MYS mys)
 {
 	((MYSD *)mys)->iOPStackUsing--;
@@ -1383,6 +1397,9 @@ int __opr_cvi(MYS mys)
 		PushInteger(mys, (long)Obj.un.dReal);
 		break;
 	case OTE_INTEGER:
+		break;
+	case OTE_STRING:
+		PushInteger(mys, atoi(GET_STRING(&Obj)));
 		break;
 	default:
 		OPSTACK_RESTORE(mys);
@@ -1845,6 +1862,30 @@ int __opr_ceil(MYS mys)
 	return MYS_OK;
 }
 
+int __opr_string(MYS mys)
+{
+	((MYSD *)mys)->iOPStackUsing--;
+
+	if (((MYSD *)mys)->iOPStackUsing < 1)
+	{
+		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "array");
+	}
+
+	MYS_OBJ Obj = *STACK_OBJ_LAST(mys, 0);
+
+	if (Obj.ObjType != OTE_INTEGER)
+		return iError(mys, TYPECHECK, __func__, __LINE__, "array");
+
+	int iLength = GET_INTEGER(&Obj);
+
+	MYS_OBJ *pObjArray = STACK_OBJ_LAST(mys, 0);
+	pObjArray->bExecutable = false;
+	pObjArray->ObjType = OTE_STRING;
+	pObjArray->un.pVar = pVarCreate(mys, VTE_NULLSTRING, &iLength);
+
+	return MYS_OK;
+}
+
 int __opr_array(MYS mys)
 {
 	((MYSD *)mys)->iOPStackUsing--;
@@ -1944,8 +1985,8 @@ int __opr_pwd(MYS mys)
 	((MYSD *)mys)->iOPStackUsing--;
 
 	char buf[PATH_MAX];
-	getcwd(buf, PATH_MAX);
-	PushString(mys, buf);
+	if (getcwd(buf, PATH_MAX) != nullptr)
+		PushString(mys, buf);
 	return MYS_OK;
 }
 
@@ -1967,11 +2008,12 @@ int __opr_cd(MYS mys)
 
 	((MYSD *)mys)->iOPStackUsing -= 1;
 
-	chdir(GET_STRING(&Obj));
-	char pathname[PATH_MAX];
-	getcwd(pathname, PATH_MAX);
-	PushString(mys, pathname);
-
+	if (chdir(GET_STRING(&Obj)) == 0)
+	{
+		char pathname[PATH_MAX];
+		if (getcwd(pathname, PATH_MAX) != nullptr)
+			PushString(mys, pathname);
+	}
 	return MYS_OK;
 }
 
@@ -2115,14 +2157,14 @@ int __opr_async(MYS mys)
 	for (int i = 0; i < ObjToVar.un.pVar->iLength; i++)
 	{
 		command += GET_STRING(&pObjInArray[i]);
-		command += ' ';
 	}
 
 	try
 	{
+		int err;
 		std::future<void> future = std::async(
-			std::launch::async, [command]
-			{ std::system(command.c_str()); });
+			std::launch::async, [command, &err]
+			{ err = std::system(command.c_str()); });
 		mysd->ayncTasks.push_back(std::move(future));
 		PushInteger(mys, mysd->ayncTasks.size() - 1);
 	}
@@ -2143,13 +2185,13 @@ int __opr_finished(MYS mys)
 
 	if (((MYSD *)mys)->iOPStackUsing < 1)
 	{
-		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "wait");
+		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "finished");
 	}
 
 	MYS_OBJ Obj = *STACK_OBJ_LAST(mys, 0);
 
 	if (Obj.ObjType != OTE_INTEGER)
-		return iError(mys, TYPECHECK, __func__, __LINE__, "wait");
+		return iError(mys, TYPECHECK, __func__, __LINE__, "finished");
 
 	mysd->iOPStackUsing -= 1;
 
@@ -2281,6 +2323,47 @@ int __opr_read(MYS mys)
 	return MYS_OK;
 }
 
+int __opr_closefile(MYS mys)
+{
+	((MYSD *)mys)->iOPStackUsing--;
+	OPSTACK_SAVE(mys);
+
+	if (((MYSD *)mys)->iOPStackUsing < 1)
+	{
+		return iError(mys, STACKUNDERFLOW, __func__, __LINE__, "__opr_read");
+	}
+
+	MYS_OBJ ObjFile = *STACK_OBJ_LAST(mys, 0);
+
+	if (ObjFile.ObjType != OTE_FILE)
+		return iError(mys, TYPECHECK, __func__, __LINE__, "file");
+
+	((MYSD *)mys)->iOPStackUsing -= 1;
+
+	FILE *fp = GET_FILE(&ObjFile);
+
+	if (fp != nullptr)
+	{
+		fclose(fp);
+	}
+
+	return MYS_OK;
+}
+
+int __opr_test(MYS mys)
+{
+	MYSD *mysd = (MYSD *)mys;
+
+	((MYSD *)mys)->iOPStackUsing--;
+	OPSTACK_SAVE(mys);
+
+	char *ptr = (char *)MemoryAlloc(16, __func__, __LINE__);
+	char *ptr_2 = (char *)MemoryRealloc(ptr, 32);
+	CheckMemory((char *)"test");
+
+	return MYS_OK;
+}
+
 /***************************************************
 				  OPERATORS TABLE
 ****************************************************/
@@ -2348,6 +2431,8 @@ static const MYS_OPERATOR _operators[] =
 		{"execfile", __opr_execfile, "<string> execfile -", "Execute a script file"},
 		{"run", __opr_execfile, "<string> run -", "Execute a script file"},
 
+		{"string", __opr_string, "<int> string <string>", "Create string of length <int>"},
+
 		{"search", __opr_search, "<string> <seek> search <post> <match> <pre> true # <string> <seek> search <string> false", "Search for <seek> in <string>"},
 		{"concat", __opr_concat, "<string1> <string2> concat <string3>", "Concatenate <string1> and <string2>"},
 		{"put", __opr_put, "<array|dict|string> <index|key|index> <any|any|int> put -", "Put <any|any|int> into <array|dict|string> at <index|key|index>"},
@@ -2365,7 +2450,8 @@ static const MYS_OPERATOR _operators[] =
 		{"if", __opr_if, "<bool> <proc> if -", "Execute <proc> if <bool> is true"},
 		{"ifelse", __opr_ifelse, "<bool> <proc1> <proc2> ifelse -", "Execute <proc1> if <bool> is true, <proc2> if false"},
 
-		{"time", __opr_time, "- time <currenttime>", "Return tickcount"},
+		{"tickcount", __opr_tickcount, "- tickcount <ticlcount>", "Return tickcount"},
+		{"time", __opr_time, "- time <current datetime in string>", "Return current datetime"},
 		{"help", __opr_help, "- help -", "Show operator spec"},
 		{"stdout", __opr_stdout, "<string|null> stdout --file--", "Set where to output. <string> indicates filename and <null> indicates stdout"},
 		{"debug", __opr_debug, "<bool> debug -", "Make mys debugmode"},
@@ -2381,11 +2467,14 @@ static const MYS_OPERATOR _operators[] =
 		{"messagebox", __opr_messagebox, "<string#1> <string#2> messagebox --true/false--", "shows a messagebox having the tile string#1, the message string#2 and Yes No bottoms, and returs true for yes, false for no."},
 
 		{"async", __opr_async, "[<command> <arg#1> <arg#2>... ] fork <pid>\n  [(ros2 pram set /speed_calc_node wheel_radius)(0.5)] fork", "asynchronous process execution. <pid> means process id, and the zero indicates failure."},
-		{"wait", __opr_finished, "<pid> finished <boolean>", "true for finished, false for still going"},
+		{"finished", __opr_finished, "<pid> finished <boolean>", "true for finished, false for still going"},
 		{"sleep", __opr_sleep, "<second> sleep -", ""},
 
 		{"readfile", __opr_readfile, "(filename) readfile --file--", ""},
 		{"read", __opr_read, "<file> read <int> <true> if not end-of-file\n<file> read <false> if end-of-file", ""},
+		{"closefile", __opr_closefile, "--file-- closefile -", ""},
+
+		{"test", __opr_test, "test", "test"},
 
 		{NULL, NULL, "", NULL}};
 

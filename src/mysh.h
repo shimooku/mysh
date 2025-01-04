@@ -49,7 +49,7 @@ typedef enum
 typedef enum
 {
 	VTE_STRING = 0,
-	VTE_WIDESTRING = 0,
+	VTE_NULLSTRING,
 	VTE_NAME,
 	VTE_ARRAY,
 	VTE_DICTIONARY

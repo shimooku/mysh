@@ -92,19 +92,15 @@ EXIT:
 void *MemoryRealloc(void *pMem, size_t size)
 {
 	MYS_MEMORY_HEADER *top = (MYS_MEMORY_HEADER *)((char *)pMem - sizeof(MYS_MEMORY_HEADER));
-
-	size_t original_size = top->iSize;
-
-	MYS_MEMORY_HEADER *new_top = (MYS_MEMORY_HEADER *)realloc(top, size + sizeof(MYS_MEMORY_HEADER) + sizeof(size_t));
-
-	new_top->iSize = size;
-
-	_sz_MemorySize -= original_size;
-	_sz_MemorySize += size;
-
-	*(size_t *)((char *)new_top + sizeof(MYS_MEMORY_HEADER) + size) = CHECKFLAG;
-
-	return (void *)((char *)new_top + sizeof(MYS_MEMORY_HEADER));
+	char *brace = strchr(top->info, '(');
+	*brace = 0;
+	void *ptr = (void *)MemoryAlloc(size, top->info, 0);
+	if (ptr)
+	{
+		memcpy(ptr, pMem, top->iSize);
+	}
+	MemoryFree(pMem);
+	return ptr;
 }
 
 void MemoryFree(void *pMem)
@@ -152,8 +148,8 @@ int iMysParseString(MYS mys, char *pBuffer)
 
 		if (bTokenCompleted(TOKEN(mys)) == false)
 		{
-			fgets(pBuffer, 512, ((MYSD *)mys)->fpIn);
-			cp_ptr = pBuffer;
+			if (fgets(pBuffer, 512, ((MYSD *)mys)->fpIn) != nullptr)
+				cp_ptr = pBuffer;
 		}
 		else if (uTokenLength(TOKEN(mys)))
 		{
@@ -288,6 +284,12 @@ MYS_VAR *pVarCreate(MYS mys, VAR_TYPE_ENUM VarType, void *vp_Value)
 		pVar->un.pString = (char *)MemoryAlloc(pVar->iBufferLength, "pVarCreate", __LINE__);
 		memcpy(pVar->un.pString, vp_Value, pVar->iLength + 1);
 		break;
+	case VTE_NULLSTRING:
+		pVar->iLength = *(int *)vp_Value;
+		pVar->iBufferLength = pVar->iLength + 1;
+		pVar->un.pString = (char *)MemoryAlloc(pVar->iBufferLength, "pVarCreate", __LINE__);
+		memset(pVar->un.pString, 0, pVar->iBufferLength);
+		break;
 	case VTE_ARRAY:
 		pVar->iLength = 0;
 		pVar->iBufferLength = 10;
@@ -340,6 +342,10 @@ void VarDelete(MYS mys, MYS_VAR *pVar)
 		MemoryFree(pVar);
 		break;
 	case VTE_STRING:
+		MemoryFree(pVar->un.pString);
+		MemoryFree(pVar);
+		break;
+	case VTE_NULLSTRING:
 		MemoryFree(pVar->un.pString);
 		MemoryFree(pVar);
 		break;
@@ -568,6 +574,7 @@ int iExecute(MYS mys)
 bool bRegistObjToDict(MYS mys, MYS_OBJ *pObjDict, MYS_OBJ *pObjKey, MYS_OBJ *pObjValue)
 {
 	MYS_OBJ *pObjExistValue = NULL;
+	MYSD *con = (MYSD *)mys;
 
 	MYS_OBJ *pDict = &((MYSD *)mys)->DictStack[((MYSD *)mys)->iDictStackUsing - 1];
 	for (int j = 0; j < pDict->un.pVar->iLength; j++)
@@ -753,7 +760,7 @@ void ShowArray(MYS_OBJ *pObj)
 			MYS_fprintf(MYS_stdout, "%ld", pObj->un.pVar->un.pObjInArray[i].un.iInteger);
 			break;
 		case OTE_REAL:
-			MYS_fprintf(MYS_stdout, "%lf", pObj->un.pVar->un.pObjInArray[i].un.dReal);
+			MYS_fprintf(MYS_stdout, "%g", pObj->un.pVar->un.pObjInArray[i].un.dReal);
 			break;
 		case OTE_MARK:
 			if (pObj->un.pVar->un.pObjInArray[i].bExecutable == true)
@@ -776,6 +783,8 @@ void ShowArray(MYS_OBJ *pObj)
 		MYS_fprintf(MYS_stdout, " }");
 	else
 		MYS_fprintf(MYS_stdout, " ]");
+
+	fflush(MYS_stdout);
 }
 
 void ShowOPStack(MYS_OBJ *stack, int index)
@@ -804,7 +813,7 @@ void ShowOPStack(MYS_OBJ *stack, int index)
 		MYS_fprintf(MYS_stdout, "%ld\n", GET_INTEGER(stack));
 		break;
 	case OTE_REAL:
-		MYS_fprintf(MYS_stdout, "%#g\n", GET_REAL(stack));
+		MYS_fprintf(MYS_stdout, "%g\n", GET_REAL(stack));
 		break;
 	case OTE_MARK:
 		if (MARK_EXECUTABLE((*stack)) == true)
@@ -826,6 +835,8 @@ void ShowOPStack(MYS_OBJ *stack, int index)
 		MYS_fprintf(MYS_stdout, "--file--\n");
 		break;
 	}
+
+	fflush(MYS_stdout);
 }
 
 int iError(MYS mys, ERRORTYPE type, const char *filename, const int lineno, const char *opt1, const char *opt2)
@@ -851,6 +862,8 @@ int iError(MYS mys, ERRORTYPE type, const char *filename, const int lineno, cons
 		ShowOPStack(&((MYSD *)mys)->OPStack[i], i);
 	}
 
+	fflush(MYS_stdout);
+
 	return MYS_ERR;
 }
 
@@ -867,6 +880,8 @@ void MysMessage(
 	va_end(args);
 
 	MYS_fprintf(MYS_stdout, " ##[MYS: %s]##\n", message);
+
+	fflush(MYS_stdout);
 }
 
 void MysHelp(MYS mys, const char *s1, const char *s2, const char *s3)
@@ -875,6 +890,8 @@ void MysHelp(MYS mys, const char *s1, const char *s2, const char *s3)
 		MYS_fprintf(MYS_stdout, "[%s] %s\n spec: %s\n", s1, s2, s3);
 	else
 		MYS_fprintf(MYS_stdout, "%s\n", s1);
+
+	fflush(MYS_stdout);
 	return;
 }
 
