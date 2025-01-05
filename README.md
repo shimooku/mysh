@@ -18,7 +18,7 @@ PostScriptのグラフィックス制御機能を除いたスクリプト機能�
 
 1. gitから https://github.com/shimooku/ros2_cpp_ws を取得してビルド
 
-2. [外部コマンド(アプリ)との連携](#外部コマンド(アプリ)との連携) に記載の実行方法で、ロボットシミュレータを起動
+2. [外部コマンド(アプリ)との連携](https://github.com/shimooku/ros2_cpp_ws/blob/main/README.md#%E8%BB%8A%E8%BC%AA%E3%83%AD%E3%83%9C%E3%83%83%E3%83%88%E3%82%92%E5%8B%95%E3%81%8B%E3%81%993) に記載の実行方法で、ロボットシミュレータを起動
 
 3. myshのプロジェクトフォルダから build/mysh を起動して下記のように操作する
 
