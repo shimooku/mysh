@@ -140,7 +140,7 @@ mysh/
   %% デフォルトで10個のKey-Valueペアを格納できる辞書を2つ作成
   10 dict /MyDict#1 exch def  %% exch は先頭スタック入れ替えるオペレータ
   10 dict /MyDict#2 exch def 
-
+  
   %% MyDict#1を辞書スタックに載せる
   MyDict#1 begin
     /year 2025 def
@@ -150,7 +150,7 @@ mysh/
     (**MyDict\n) print        %% print は文字列を表示するオペレータ
     year cvs print (\n) print %% cvs は数値を文字列に変換するオペレータ
     month print (\n) print
-
+  
       %% MyDict#2を辞書スタックに載せる
       MyDict#2 begin
         /year 3000 def
@@ -161,15 +161,15 @@ mysh/
         year cvs print (\n) print
         month print (\n) print
       end %% MyDict#2を辞書スタックから外す
-
+  
     %% この時点で year = 2025, month = (jan) を思い出す
     %% 記憶情報を表示
     (**MyDict\n) print
     year cvs print (\n) print
     month print (\n) print
-
+  
   end %% MyDict#1を辞書スタックから外す
-
+  
   %% MyDict#2を辞書スタックに載せる
   MyDict#2 begin
     /year 3000 def
@@ -180,7 +180,7 @@ mysh/
     year cvs print (\n) print
     month print (\n) print
   end %% MyDict#2を辞書スタックから外す  
-
+  
   %% この時点で year, monthが未定義に
   %% 記憶情報を表示
   (**\n) print
@@ -241,7 +241,7 @@ mysh/
   /stop {(stop\n) print } def
   /left {(left\n) print } def
   /right {(right\n) print } def
-
+  
   null readfile/file exch def %% null readfile によって標準入力をファイルオブジェクトに関連付け
   1 string/buffer exch def
   {
@@ -279,14 +279,14 @@ mysh/
     (0.0)                                                      %% 入れ替える
     (}}')                                                      %% 固定にする
   ]def
-
+  
   %% 外部コマンドを呼び出し、レスポンスが来るまで待つコマンドを作成
   /exec_command
   {
     async/pid exch def                          %% asyncでコマンド実行
     {pid finished {exit}{2 sleep} ifelse }loop  %% finished で終了チェック, sleepでチェック頻度を調整
   } def
-
+  
   %% キー入力検出した後のアクションを定義
   /finish {(\nfinished\n) print exit} def
   /forward { command 2 (1.0) put command exec_command} def
@@ -297,7 +297,7 @@ mysh/
   
   null readfile/file exch def %% null readfile によって標準入力をファイルオブジェクトに関連付け
   1 string/buffer exch def    %% 1文字コードを格納するバッファを準備
-
+  
   %% キー入力を検出し、文字コードによって動作を振り分け実行するループ
   {
     file read  %% キー入力を検出し、成功すれば文字コードとtrueを、失敗すればfalseをスタックに載せる
@@ -317,215 +317,207 @@ mysh/
   } loop
   ```
 
+## 基本アルゴリズム
+
+myshは入力データをスキャンして、トークンを抽出し、[トークン記述ルール](#オブジェクトの種類)に則り下記を行う。
+* トークンが実行名の場合は、それをKeyにした辞書検索を行い、
+  * 辞書から取得したValueの実行属性がtrueなら、Valueを実行 (オペレータ、実行配列、実行名が相当)
+  * 辞書から取得したValueの実行属性がfalseなら、Valueをオペランドスタックにpush
+* トークンが実行名以外の場合は、オブジェクト化してオペランドスタックにpush
+
+つまり、実行属性がtrueのオブジェクトが実行されるタイミングは、基本的には辞書検索で見つかった時。
+
+それだと機能性が若干損なわれる (動的に命令を生成したい) ため、文字列を実行配列に変換 (***cvx***オペレータ) し、オペランドスタックに載っている実行可能 (=実行属性がtrue) なオブジェクトを強制的に実行する ***exec***オペレータ を追加している。
+
+例えば下記の場合 {1 2 add} を実行する事になる。
+```
+(1 ) (2 ) concat (add) concat cvx exec
+```
+
 ## オブジェクトの種類
 
-|オブジェクト|説明|
-|---|---|
-|Boolean|true, false|
-|整数|-2, -1, 0, 1, 2, ...|
-|浮動小数|-1.0, -20., 0.0, 1.0, 2.0, ...|
-|配列開始マーク|オペランドスタックに配列要素を積む直前の配列開始マーク`[`|
-|[リテラル名](#リテラル配列と実行配列手続き)|/ABC, /abc, /Abc, ....|
-|[検索名](# リテラル名と検索名)|ABC, abc, Abc, ....|
-|文字列|(ABC), (abc), (Abc), ...|
-|[リテラル配列](# リテラル配列と実行配列)|[1 2 3], [(a) (b) (cd)], [(abc) [10 0.2] /cc], ...|
-|[実行配列](# リテラル配列と実行配列)|{1 2 3}, {(a) (b) (cd)}, {(abc) [10 0.2] /cc}, ...|
-|空オブジェクト|`null`でスタックに積む。表示は`--nulll--`。|
-|辞書|Key-Valueのペアの集合。複数作成可。辞書をValueにする事も可。|
-|ファイル|`readfile`で開いたファイルを識別するオブジェクト|
+|オブジェクト|表記|実行<br />属性|トークン記述ルール|
+|---|:-:|:-:|:-:|
+|Boolean|*--bool--*|false|***true, false***|
+|整数|*--int--*|false|*-2, -1, 0, 1, 2, ...*|
+|浮動小数|--*real*--|false|*-1.0, -20., 0.0, 1.0, 2.0, ...*|
+|配列開始マーク|--*mark*--|false|***[***|
+|[リテラル名](#リテラル配列と実行配列手続き)|--*litname*--|false|名前の前に/を付けたもの  e.g. */ABC, /abc, /Abc, ....*|
+|[実行名](# リテラル名と実行名)|--*name*--|**true**|セパレータ以外の文字を使った文字列 e.g. *ABC, abc, Abc, ....*|
+|文字列|--*string*--|false|***( )*** で囲った文字列でセパレータ文字を含める事ができる|
+|[リテラル配列](# リテラル配列と実行配列)|--*array*--|false|***[ ]*** で複数のトークンを囲ったもの|
+|[実行配列](# リテラル配列と実行配列)|--*execarray*--|**true**|***{ }*** で複数のトークンを囲ったもの|
+|空オブジェクト|--*null*--|false|***null***|
+|辞書|--*dict*--|false|Key-Valueのペアの集合。複数作成可。辞書をValueにする事も可。|
+|ファイル|--*file*--|false| _**readfile**_で作成するものなのでトークンは無い             |
+|オペレータ||**true**|実行名と同じ|
 
-### リテラル名と検索名
 
-* リテラル名はスタック上にリテラル名オブジェクトとして積まれる一方で，検索名は辞書検索結果がスタック上に積まれる。
-* 例えば /ABC (abc) def の登録がある場合，/ABC ⇨ /ABC となり ABC ⇨ (abc) となる。
-* 検索名による検索結果が実行配列の場合，スタックに積まれた実行配列は即実行される。
+### リテラル名と実行名
+
+* リテラル名はスタック上にリテラル名オブジェクトとして積まれる一方で，実行名は辞書検索結果がスタック上に積まれる。
+* 例えば /ABC (abc) def の登録がある場合，リテラル名の/ABC⇨ /ABC となり 実行名のABC ⇨ (abc) となる。
+* 実行名による検索結果が実行配列の場合，スタックに積まれた実行配列は即実行される。
 
 ### リテラル配列と実行配列(手続き)
 
 #### リテラル配列を作成する操作
 * `[ 1 2 add]` の入力結果は `[ 3 ]` となり，`[`と`]`の間は直ぐに実行
 #### 実行配列(手続き)を作成する操作
-* `{ 1 2 add }` の入力結果は `{ 1 2 add }` となり，`{`と`}`の間は実行されずそのまま記録
-* 実行配列は，検索結果のValueとしてスタックに積まれる即実行
+* `{ 1 2 add }` の入力結果は `{ 1 2 add }` となる。
+* `{`をオペランドスタックに載せたら`}`が来るまで、実行可能オブジェクトも実行せず、すべてのトークンをオペランドスタックにpushし、`}`で実行配列を形成してオペランドスタックに載せる
+  * ここは実行配列の実行タイミングにはならない
 
 ## オペレータの種類
 
-### ヘルプ
-|オペレータ|説明|パラメータ|結果|
-|--:|:-|:--|:--|
-|**help**|コマンド仕様表示|コマンドのリテラル名 /dup **help**|標準出力にコマンド仕様を表示|
-
 ### 演算
-|オペレータ|説明|パラメータ|結果|
-|--:|:-|--:|:--|
-|`add`|加算|1 2 **add** *3*|3|
-|`sub`|減算|5 2 `sub`|3|
-|`mul`|積算|5 2 `mul`|10|
-|`div`|除算|5 2 `div`|2|
-|||5.0 2 `div`|2.5|
-|`mod`|余り|5 2 `mod`|1|
-|`ceil`|切り上げ|2.4 `ceil`|3.0|
-|`round`|四捨五入|2.4 `round`|2.0|
-|`tuncate`|切り捨て|2.4 `truncate`|2.0|
-|`abs`|絶対値|-1. `abs`|1.|
-|||-1 `abs`|1|
-|`and`|AND算|3 5 `and`|1|
-|`or`|OR算|3 5 `or`|7|
-|`xor`|XOR算|3 5 `xor`|6|
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***add***|整数あるいは実数の加算<br/>  _--num#1-- --num#1-- **add**_|_--num#1-- **+** --num#2--_|
+|***sub***|整数あるいは実数の減算<br/>  _--num#1-- --num#1-- **sub**_|_--num#1-- **-** --num#2--_|
+|***mul***|整数あるいは実数の積算<br/>  _--num#1-- --num#1-- **mul**_|_--num#1-- **x** --num#2--_|
+|***div***|整数あるいは実数の除算(整数だけの時は切り捨て発生)<br/>  _--num#1-- --num#1-- **div**_<br/> ーーーーーーーーーーーーーーー<br/>  整数演算 _5 2 **div**_ ➔ 2 切り捨て発生<br/>  小数点演算 _5.0 2 **div**_ ➔ 2.5|_--num#1-- **/** --num#2--_|
+|***mod***|整数除算の余り<br/>  _--int#1-- --int#2-- **mod**_|_--int#1-- **mod** --int#2--_|
+|***ceil***|切り上げ<br/>  _--num-- **ceil**_|_--num-- **ceil**_|
+|***round***|四捨五入<br/>  _--num-- **round**_|_--num-- **round**_|
+|***truncate***|切り捨て<br/>  _--num-- **truncate**_|_--num-- **truncate**_|
+|***abs***|絶対値<br/>  _--num-- **abs**_|_--num-- **abs**_|
+|***and***|整数のAND演算<br/>  _--int#1-- --int#2-- **and**_|_-int#1-- **&** --int#2--_|
+|***or***|整数のOR演算<br/>  _--int#1-- --int#2-- **or**_|_-int#1-- **or** --int#2--_|
+|***xor***|整数のXOR演算<br/>  _--int#1-- --int#2-- **xor**_|_-int#1-- **xor** --int#2--_|
 
 
 ### 比較
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`eq`|等しければtrueを積む|(abc) (abc) `eq`| true |
-|||(abc) (ABC) `eq`| false |
-|||3 3 `eq`| true |
-|`ne`|等しくなければtrueを積む|(abc) (abc) `ne`| false |
-|||(abc) (ABC) `ne`| true |
-|`ge`|Greater equal|2 1 `ge`|true|
-|||2 2 `ge`|true|
-|`gt`|Greater than|2 1 `gt`|true |
-|||2 2 `gt`|false |
-|`le`|Less equal|3 3 `le`|true|
-|||3 4 `le`|true|
-|`lt`|Less than|3 3 `lt`|false|
-|||3 4 `lt`|true|
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***eq***|オブジェクト同士 (数値、名前、文字列) の等価比較<br>  _--any#1-- --any#2-- **eq**_| 等しければ _--true--_<br>違えば _--false--_ |
+|***ne***|オブジェクト同士 (数値、名前、文字列) の非等価比較<br>  _--any#1-- --any#2-- **ne**_| 等しければ _--false--_<br>違えば _--true--_ |
+|***ge***|オブジェクト同士 (数値) の ≧ 評価<br>  _--num#1-- --num#2-- **ge**_| _--num#1-- **≧** --num#2--<br>成立すれば _--true--_ <br>しなければ _--false--_ |
+|***gt***|オブジェクト同士 (数値) の ＞ 評価<br>  _--num#1-- --num#2-- **gt**_| _--num#1-- **＞** --num#2--<br>成立すれば _--true--_ <br>しなければ _--false--_ |
+|***le***|オブジェクト同士 (数値) の ≦ 評価<br>  _--num#1-- --num#2-- **le**_| _--num#1-- **≦** --num#2--<br>成立すれば _--true--_ <br>しなければ _--false--_ |
+|***lt***|オブジェクト同士 (数値) の ＜ 評価<br>  _--num#1-- --num#2-- **lt**_| _--num#1-- **＜** --num#2--<br>成立すれば _--true--_ <br>しなければ _--false--_ |
 
 ### スタック操作
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`pop`|先頭スタックを捨てる|3 4 `pop`|3|
-|`exch`|先頭スタック入れ替え|3 5 `exch`| 5 3 |
-|`dup`|先頭スタック複製|3 `dup`| 3 3 |
-|||(abc) `dup`| (abc) (abc) |
-|`roll`| .... *--num1--* *--num2--* `roll` <br>スタックの*num1* 個の要素を*num2* 回ロールする | 10 20 30 40 4 1 `roll` |40 10 20 30|
-|||10 20 30 40 4 -1 `roll`|20 30 40 10|
-|`clear`|スタックの全クリア|10 20 30 40 `clear`|- |
-|`pstack`|全スタックの表示|10 20 30 `pstack`|10<br>20<br>30|
-|`print`|先頭スタック文字列の表示|(abc) `print`|標準出力に abc|
-|`==`|先頭スタックの表示|(abc) `==`|標準出力に (abc) |
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***pop***|先頭スタックをポップ<br>  _--any-- **pop**_ |先頭スタックがpopされた状態|
+|***exch***|先頭スタック入れ替え<br>  _--any#1-- --any#2-- **exch**_ | _--any#2-- --any#1--_ |
+|***dup***|先頭スタックの複製<br>  _--any-- **dup**_|_--any-- --any--_|
+|***roll***|オペランドスタック回転 n個の要素をm個シフトする<br>  _--any#1-- ... --any#n-- --int@n-- --int@m-- **roll**_ <br/>ーーーーーーーーーーーーーーーーーーーー<br/>  _(a) (b) (c) 3 -1 **roll**_ ➔ (b) (c) (a) <br/>  _(a) (b) (c) 3 1 **roll**_ ➔ (c) (b) (a)|回転後のオペランドスタック|
+|***clear***|オペランドスタックの全クリア<br/>  _--any#1-- ... --any#n-- **clear**_|オペランドスタックが空に|
+|***pstack***|オペランドスタックの表示<br/>  ***pstack***|なし|
+|***print***|標準出力/ファイルに指定文字列を出力<br/>  _--string-- **print**_|なし|
+|***==***|先頭スタックのみ表示してpopする<br/>  _--any-- **==**_|なし|
 
 ### オブジェクト型変換
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`cvi`|整数に変換|2.0 `cvi`| 2 |
-|`cvr`|実数に変換|2 `cvr`|2.0|
-|`cvs`|文字列に変換|2 `cvs`|(2)|
-|`cvx`|実行型に変換|[ 1 2 3 ] `cvx`|{1 2 3}|
-|||( 1 2 3 ) `cvx`|{1 2 3}|
-|`cvn`|名前に変換|(abc) `cvn`|/abc|
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***cvi***|数値や文字列を整数に変換<br/>  _--num-- **cvi**_<br/>  _--string-- **cvi**_<br/>ーーーーーーーーーーー<br/>  _1.5 **cvi**_ ➔ 1<br/>  _(123) **cvi**_ ➔ 123|_--int--_|
+|***cvs***|数値を文字列に変換<br/>  _--num-- **cvs**_<br/>ーーーーーーーーーーー<br/>  _3.14 **cvs**_ ➔ (3.14)|--string--|
+|***cvx***|任意のオブジェクトを実行型に変換<br/>  _--any-- **cvx**_<br/>ーーーーーーーーーーー<br/>  _( 1 2 add ) **cvx**_ ➔ { 1 2 add }<br/>  _[ 1 2 3 ] **cvx**_ ➔ { 1 2 3 }<br/>  _( 1 2 3 ) **cvx**_ ➔ { 1 2 3 }<br/>  _1 2 /add **cvx**_ ➔ 1 2 /add|実行型オブジェクト|
+|***cvn***|文字列をリテラル名に変換<br/>  _--string-- **cvn**_<br/>ーーーーーーーーーーー<br/>  _(January) **cvn**_ ➔ /January|リテラル名オブジェクト|
 
 
 ### 配列操作
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`array`|指定長さの配列生成|3 `array`| [ *--null--* *--null--* *--null--* ] |
-|`aload`|配列展開|[ 0 1 2 ] `aload`| 0 1 2 [ 0 1 2 ] |
-|`copy`|配列要素コピー|[ (a) (b) ] [1 2 3 ] `copy`|[ (a) (b) 3 ]|
-|`[`|配列開始|[ (a) (b) `]`|[ (a) (b) ]|
-|`mark`|配列開始|[ (a) (b) `]`|[ (a) (b) ]|
-|`]`|配列生成|[ (a) (b) `]`|[ (a) (b) ]|
-|`closearray`|配列生成|[ (a) (b) `]`|[ (a) (b) ]|
-|`}`|実行配列生成|{ (a) (b) `}`|{ (a) (b) }|
-|`put`|配列に要素を挿入|3 array dup 0 (abc) `put`| [ (abc) *--null--* *--null--* ] |
-|`putinterval`|配列Aに配列Bの要素を挿入|/ar [1 2 3 4] def ar 2 [98 99] `putinterval` ar| [1 2 98 99] |
-|`get`|配列から要素を取得|[ 1 2 3 ] 1 `get`| 2 |
-|`getinterval`|配列から要素を配列として取得|[1 2 3 4] 2 3 `getinterval`| [3 4] |
-|`length`|要素数取得|[ 1 2 3 ] `length`| 3 |
-|`maxlength`|容量取得|10 array `maxlength`| 10 |
-|`forall`|全配列要素に対して*--proc--*を実行|[ 1 2 3 ] { 5 add == } `forall`| 6<br>7<br>8 |
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***array***|指定長さの配列生成<br/>  _--int#n-- **array**_| 指定数のnullオブジェクトが入った配列<br/> _[--null#1-- ... --null#n--]_ |
+|***aload***|配列をオペランドスタックに展開<br/>  _[ --any#1-- ... --any#n] **aload**_|_--any#1-- ... --any#n-- [ --any#1-- ... --any#n]_|
+|***copy***|配列aの要素を配列bにコピーする<br/>  _[ --any#**a1**-- .. --any#**an**-- ] [ --any#**b1**-- .. --any#**bn**-- any#**bn-+1**- ] **copy**_|_[ --any#**a1**-- ... --any#**an**-- --any#**bn+1**-- ]_|
+|***[***|配列開始|***[***|
+|***mark***|配列開始 ( ***[*** と同じ)| ***[***                                                      |
+|***]***|オペランドスタックで一番近い ***[*** との間にある全オブジェクトを格納したリテラル配列を生成|リテラル配列|
+|***closearray***|オペランドスタックで一番近い ***[*** との間にある全オブジェクトを格納したリテラル配列を生成|リテラル配列|
+|           ***}*** |オペランドスタックで一番近い ***{*** との間にある全オブジェクトを格納した実行配列を生成<br /> ***{*** と ***}*** の間は、実行可能オブジェクトであって実行しないので、スタック上にある ***{***  を見る術は無い。|実行配列|
+|***put***|配列に任意オブジェクトをindexの位置に挿入する<br/>  _--array-- --int@index-- --any-- **put**_<br/>ーーーーーーーーーーー<br/>  _[ (0) 1 2 (3) 4 ] dup 2 /hoge **put**_ ➔ [ (0) 1 /hoge (3) 4 ]<br/>  _{ (0) 1 2 (3) 4 } dup 2 /hoge **put**_ ➔ { (0) 1 /hoge (3) 4 }|要素を挿入した配列|
+|***putinterval***|配列#1に配列#2の要素をindexの位置から挿入する<br/>  _--array#1-- --int@index-- --array#2-- **putinterval**_<br/>ーーーーーーーーーーー<br/>  _[ 0 1 2 3 ] dup 1 [(a) (b)] **putinterval**_ ➔ [ 0 (a) (b) 3]|要素を挿入した配列|
+|***get***|配列からindexの位置にある要素を取得する<br/>  _--array-- --int@index-- **get**_<br/>ーーーーーーーーーーー<br/>  _[ (0) 1 2 (3) 4 ] 3 **get**_ ➔ (3)<br />  _{ (0) 1 2 (3) 4 } 3 **get**_ ➔ (3)|配列から取得した要素<br /> _--any--_***|
+|***getinterval***|配列からindexの位置からcnt分の要素を配列として取得<br />  _--array-- --int@index-- --int@cnt **getinterval**_<br />ーーーーーーーーーーーーー<br/>  _[ (0) 1 2 (3) 4 ] 3 2 **getinterval**_ ➔ [(3) 4]<br />  _{ (0) 1 2 (3) 4 } 3 2 **getinterval**_➔ {(3) 4}|配列から取得した要素配列<br />_--array--_|
+|***length***|配列要素数取得<br />  _--array-- **length**_|要素数<br />_--int--_|
+|***maxlength***|配列最大容量取得<br />  _--array-- **maxlength**_|最大容量数<br />_--int--_|
 
 ### 辞書
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`begin`|指定辞書を辞書スタック先頭に載せてカレント辞書にする|`10 dict begin`|*--dict--*|
-|`def`|辞書登録|`/Name (value) def`|カレント辞書にNameという名前で文字列(value)を登録|
-|`end`|カレント辞書を閉じる|`end`|辞書スタック先頭の辞書をPOPしてその下の辞書をカレント辞書にする|
-|`dict`|デフォルトで指定した数のKey-Valueペアを格納できる辞書を作成する。その数を超える事は出来るがreallocが走るので少し遅くなる。|10 `dict`|*--dict--*|
-|`currentdict`|辞書スタックの先頭にある辞書をスタックに載せる|`currentdict`|*--dict--* |
-|`load`|カレント辞書に登録されているValueをスタックに載せる|/Name (value) def /Name `load`|(value) |
-|`put`||3 dict dup /ABC (abc) `put` begin /ABC load|(abc)|
-|`get`||3 dict begin /ABC (abc) def currentdict /ABC `get`| (abc) |
-|`length`|登録アイテム数取得|3 dict `length`| 0 |
-|||3 dict /ABC (abc) def currentdict `length`| 1 |
-|`maxlength`|容量取得|10 dict `maxlength`| 10 |
-|`forall`|全辞書エントリーに対して*--proc--*を実行|`10 dict begin /A (a) def /B (b) def /C (c) def currentdict { } forall `end| /A (a) /B (b) /C (c) |
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***begin***|指定辞書を辞書スタックにpushしてカレント辞書にする<br />  _--dict-- **begin**_|なし|
+|***def***|Key-Valueペアをカレント辞書に登録する<br />  _--litname@key-- --any@value-- **def**_<br />ーーーーーーーーーーーーーーーーーーーーー<br/>  _/hoge (hoge's value) **def**    hoge_ ➔ (hoge's value)|なし|
+|***end***|辞書スタックの最上位辞書をpopし、次の辞書をカレント辞書にする。最下層にあるシステム辞書は***end***出来ない。<br />  _**pop**_|なし|
+|***dict***|指定した数のKey-Valueペアを格納する辞書を作成する。Key-Valueペアは指定数を超えてその辞書登録できるが、処理速度が遅くなる可能性がある。<br />  _--int-- **dict**_|*--dict--*|
+|***currentdict***|辞書スタックの最上位にある辞書(カレント辞書)をオペランドスタックにpushする<br />  _**currentdict**_|*--dict--* |
+|***load***|指定した/nameをKeyにして検索し、得られたValueをオペランドスタックにpushする。Valueが実行可能(実行属性がtrue)であっても実行しない。<br />  _--litname@key-- **load**_<br />ーーーーーーーーーーーーーーーーーーーーー<br/>  _/hogeP {1 2 add} **def**   /hogeP load_ ➔ {1 2 add}|_--any@value--_ |
+|***put***|任意のオブジェクトを指定した/nameで指定辞書に登録する。辞書を指定できる点が***def***と異なる。<br />  _--dict-- --litname@key-- --any@value-- **put**_|なし|
+|***get***|指定した辞書から指定した/nameのValueを取得してオペランドスタックのpushする。Valueが実行可能であっても実行しない。<br/>  _--dict-- --litname@key-- **get**_| _--any@value--_ |
+|***length***|指定した辞書から登録アイテム数を取得してオペランドスタックにpush<br />  _--dict-- **length**_| _--int--_ |
+|***maxlength***|指定した辞書の容量(Key-Valueペア登録可能最大容量)を取得<br />  _--dict-- **maxlength**_| _--int--_ |
 
 ### 文字列
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`search`|文字列の部分検索|(abcd) (bc) `search`|(d) (bc) (a) true|
-|||(abcd) (ab) `search`|(cd) (ab) () true|
-|||(abcd) (cd) `search`| () (cd) (ab) true                                            |
-|||(abcd) (efg) `search`|(abcd) false|
-|`concat`|結合文字列生成|(abc) (def) `concat`| (abcdef) |
-|`put`||(0123456789) dup 3 97 `put`|(012a456789)|
-|`putinterval`||/ar (1234) def ar 2 (xy) `putinterval` ar| (12xy) |
-|`get`||(abcdefg) 0 `get`| 97 |
-|`length`|サイズ取得|(abcdef) `length`| 6 |
-|`getinterval`|*--string--* *--index--* *--count--* `getinterval`<br> *string*の*index*番目から*count*数分の文字を切り出して文字列作成|(abcdef) 2 3 `getinterval`| (cde) |
-|`forall`|文字列中の文字に対して*--proc--*を実行|(abcdef) { } `forall`| 97 98 99 100 101 102 |
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***search***|文字列#1から文字列#2の部分一致を検索する<br />  _--string-- --seek-- **search**_<br />ーーーーーーーーーーーーーーーーーーーーー<br/>  _(abbc) (ab) **search**_ ➔ (bc) (ab) () true<br />  _(abbc) (bb) **search**_ ➔ (c) (bb) (a) true<br />  _(abbc) (bc) **search**_ ➔ () (bc) (ab) true<br />  _(abbc) (B) **search**_ ➔ (abbc) false|あった場合:<br />  _--post-- --match-- --pre-- --true--_<br />ない場合:<br />  _--string-- --false--_|
+|***concat***|文字列#1と文字列#2を結合した文字列を生成する<br />  _--string#1-- --string#2-- **concat**_ <br />ーーーーーーーーーーーーーーーーーーーーー<br/>  _(abc def) (ghi jkl) **concat**_ ➔ (abc defghi jkl)| _--string--_ |
+|***put***|文字列の指定index位置に指定した文字コードを挿入する<br/>  _--string-- --int@index-- --int@charcode-- **put**_<br/>ーーーーーーーーーーーーーーーーーーー<br/>  _(abcdefg) dup 2 32 **put**_ ➔ (ab defg)|_--string--_|
+|***putinterval***|文字列#1に文字列配列#2の要素をindexの位置から挿入する<br/>  _--string#1-- --int@index-- --string#2-- **putinterval**_<br/>ーーーーーーーーーーーーーーーーーーーーーーー<br/>  _(abcdefghi) dup 2 (1234) **putinterval**_ ➔ (ab1234ghi)| _--string--_ |
+|***get***|文字列からindexの位置にある文字コードを取得する<br/>  _--string-- --int@index-- **get**_<br/>ーーーーーーーーーーー<br/>  _(abcdefg) 3 **get**_ ➔ 100| _--int--_ |
+|***length***|指定した文字列の文字列長を取得する<br />  _--string-- **length**_| _--int--_ |
+|***getinterval***|文字列からindexの位置からcnt分の文字を文字列として取得<br />  _--string-- --int@index-- --int@cnt **getinterval**_<br />ーーーーーーーーーーーーー<br/>  _(abcdefghijkl) 3 4 **getinterval**_ ➔ (defg)| _--string--_ |
 
 ### 実行
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`exec`|強制実行|{1 2 add} `exec`| 3 |
-|`execfile`|ファイル読み込み実行|(test.tos) `execfile`| (test.tos) を実行 |
-|`run`|ファイル読み込み実行|(test.tos) `run`| (test.tos)を実行 |
+|オペレータ|説明／使用例|出力|
+|--:|--|:--|
+|***exec***|オペランドスタック最上位のオブジェクトを実行<br />・オブジェクトが実行属性がtrueであれば実行<br />・オブジェクトの実行属性がfalseであれば何も起きない<br />  _--any-- **exec**_| なし |
+|***run***|指定したmyshスクリプトファイルを実行<br />  _--string-- **run**_<br />ーーーーーーーーーーーーー<br/>  _(/temp/sample.txt) **run**_| なし |
 
 ### ループ
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`for`|*--initvalue--* *--step--* *--limit--* { } for|1 1 3 { } `for`|1 2 3|
-|`forall`|配列，辞書，文字列のforallを参照|||
-|`loop`| *--proc--* をexitするまで実行 | { } `loop` | exitコマンドを実行するまで永遠にproc実行を繰り返す |
-|`repeat`| *--count--* { } repeat <br>*count*数分*--proc--*を実行する | 3 { } `repeat` | 3回proc実行を繰り返す |
-|`exit`|for, forall, loop, repeatの繰り返しから抜ける|||
+|オペレータ|説明／使用例|出力|
+|--:|---|:--|
+|***for***|initial値からlimit値までのstep値を指定し、その間の数値をスタックに乗せてprocを実行。数値は整数実数を問わない<br/>  _--num@initial-- --num@step-- --num#limit-- --proc-- **for**_<br/>ーーーーーーーーーーーーーーーーー<br/>  _1 1 5 {cvs} **for**_ ➔ (1) (2) (3) (4) (5) |procの処理内容に依存|
+|***forall***|配列，辞書，文字列の全要素に対してprocを実行<br/>  _--array-- --proc-- **forall**_<br/>  _--dict-- --proc-- **forall**_<br/>  _--string-- --proc-- **forall**_<br/>ーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー<br/>  _[ (a) (b) (c) 12 ] {} **forall**_ ➔ (a) (b) (c) 12 <br />  _3 dict begin /v#1 8 def/v#2 9 def currentdict {} **forall**_ ➔ /v#1 8 /v#2 9<br />  _(abcdef) {} **forall**_ ➔ 97 98 99 100 101 102|procの処理内容に依存|
+|***loop***| procの中で明示的に***exit***するか、エラー発生までprocを繰り返し処理する<br/>  _--proc-- **loop**_<br/>ーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー<br/>  _/cnt 0 def {/cnt cnt 1 add dup 3 1 roll def cnt 5 ge {**exit**} if } **loop**_ ➔ 1 2 3 4 5 |procの処理内容に依存|
+|***repeat***| 指定回数分だけprocを繰り返し実行する<br />  _--int@count-- --proc-- **repeat**_<br/>ーーーーーーーーーーーーーーーーー<br/>  _3 {null} **repeat**_ ➔ --null-- --null-- --null-- | procの処理内容に依存 |
+|***exit***|for, forall, loop, repeatの繰り返しから強制的に抜ける<br/>ーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーーー<br/>  _/cnt 0 def {/cnt cnt 1 add dup 3 1 roll def cnt 5 ge {**exit**} if } **loop**_ ➔ 1 2 3 4 5|なし|
 
 ### 分岐
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`if`|IF分岐|true { (ABC) } `if`|(ABC)|
-|`ifelse`|IF-ELSE分岐|true { (ABC) } { (DEF) } `ifelse`|(ABC)|
+|オペレータ|説明／使用例|出力|
+|--:|---|:--|
+|***if***|IF分岐。trueの時のみ手続きを実行する指示。<br/>  _--bool-- --proc@true-- **if**_<br/>ーーーーーーーーーーーーー<br/>   _true { 1 2 add } **if** ➔ 3_<br/>   _false { 1 2 add } **if** ➔ none_ |proc@trueの処理に依存|
+|***ifelse***|IF-ELSE分岐<br/>  _--bool-- --proc@true-- --proc@false-- **ifelse**_<br/>ーーーーーーーーーーーーー<br/>   _true { 1 2 add } { 3 4 add } **ifelse** ➔ 3_<br/>   _false { 1 2 add } { 3 4 add } **ifelse** ➔ 7_ |proc@true, proc@falseの処理に依存|
 
 ### 計測
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`tickcount`|msecオーダのTick Count|- `tickcount`| *--num--* as time in msec                                    |
+|オペレータ|説明／使い方|出力|
+|--:|----|:--:|
+|***tickcount***|msecオーダのTick Countを返す<br/>  ***tickcount***| _--int--_|
 
 ### 日時
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`time`||- `time`|*--string--* like (2021/12/20@12:00:00)|
+|オペレータ|説明／使い方|出力|
+|--:|---|:--|
+|***time***|その時の日時を取得<br/>  ***time***|_--string--_<br/>文字列のフォーマットは(日付@時間)<br/>例: _(2025/01/05@12:00:00)_|
 
 ### ファイル
-|オペレータ|説明|使用例|結果|
-|--:|:-|:--|:--|
-|readfile|読み込みファイルを開く|(filename) **readfile** *--file--*<br/>null **readfile** *--file--*|ファイル入力<br/>標準入力|
-
-		{"read", __opr_read, "<file> read <int> <true> if not end-of-file\n<file> read <false> if end-of-file", ""},
-		{"closefile", __opr_closefile, "--file-- closefile -", ""},
+|オペレータ|説明／使い方|出力|
+|--:|--|:--|
+|***readfile***|読み込み用ファイルを開く<br/>ファイル読み込み:<br/>  _--string@filename-- **readfile**_<br/>※***closefile***するまでファイルを掴んだまま<br />標準入力:<br/>  _null **readfile**_|_--file--_|
+|***read***|ファイル/標準入力から1文字読み込み<br/>  _--file-- **read**_|_--int(charcode)-- --true--_ for not EOF<br/>_--false--_ for EOF<br/> |
+|***closefile***|ファイルクローズ<br/>  _--file-- **closefile**_|なし|
 
 ### メモリチェック
-|オペレータ|説明|使用例|結果|
-|--:|:-|--:|:--|
-|`enummem`|使用中のメモリーブロック表示|- `enummem`|使用中のメモリーブロック表示|
-|`checkmem`|メモリー破壊箇所表示|- `checkmem`|メモリー破壊箇所表示|
+|オペレータ|説明／使い方|出力|
+|--:|----|:--:|
+|***enummem***|使用中のメモリーブロックを画面にリスト表示<br/>  ***enummem***|なし|
+|***checkmem***|メモリー破壊箇所を画面にリスト表示<br/>  ***checkmem***|なし|
 
 ### その他コマンド
-|オペレータ|説明|使い方|出力|
-|--:|:-|--|:--|
-|`prompt`|プロンプト表示|mysh起動後に`prompt`と入力して改行すると下記のようにプロンプトを表示<br/>`mash> `|なし。<br/>入力を促すのみ。 |
-|`cd`|カレントパス変更|(/temp) `cd`| /tempに移動 |
-|`pwd`|カレントパスを文字列にしてスタックに載せる|- `pwd`| (/temp) |
-|`enumfiles`|filter検索されたファイル名を順次スタックに載せて*--proc--* を実行|(*) { } `enumfiles`|  |
-|`getenv`|環境変数値の取得|(HOME) `getenv` |<string> |
-|`messagebox`|メッセージボックスを表示してYES/NOの選択を促す|(TITLE) (YES to continue, NO to stop) `messagebox` | --true/false-- |
-|`async`|外部プロセスを実行(非同期)| `[ (ros2 pram set /speed_calc_node wheel_radius) (0.5) ] async`<br/> 起動時コマンドを配列に入れて指定|integer<br/>(プロセス管理番号)|
-|`finished`|`async`で取得したプロセス管理番号に対して`finished`を実行して、完了か動作中かを確認 | |終了していれば`true`、実行中なら`false` |
-|`sleep`|処理を指定秒停止 |10秒停止 `10 sleep`|なし|
-|`quit`|TOS終了|`quit`|なし|
-
+|オペレータ|説明／使い方|出力|
+|--:|----|:--:|
+|***prompt***|プロンプト表示<br/>mysh起動後に_**prompt**_と入力して改行すると***msh>***を表示して入力を促す|なし|
+|***cd***|指定したフォルダをカレントフォルダにする<br/>  _--string@path-- **cd**_<br />ーーーーーーーーーーーーー<br/>例) /tempに移動したい時は<br/>  _(/temp) **cd**_|なし|
+|***pwd***|カレントフォルダを文字列にしてスタックに載せる<br/>  _**pwd**_| _(directory-name)_ |
+|***enumfiles***|filter検索したファイル名を順次スタックに載せてprocを実行<br/>  _--string@filter-- --proc-- **enumfiles**_<br/>例) カレントフォルダにあるファイル列挙をする場合<br/>  _(*) { print (\n) print} **enumfiles**_| procで何をスタックに積むかに依存 |
+|***getenv***|環境変数値の取得<br/>環境変数を文字列で指定して**getenv**<br/>  _--string@env-- **getenv**_ | _(value)_|
+|***messagebox***|メッセージボックスを表示してYES/NOの選択を促し、その結果をスタックに積む<br/>表示パネルのtitleとmessageを設定して実行<br/>  _--string@title-- --string@message-- **messagebox**_ | YES ➔ _--true--_<br/>NO ➔ _--false--_ |
+|***async***|外部コマンドを非同期に実行<br/>配列にコマンド文字列を入れて実行<br/>  _[ --string-- --string-- ... ] **async**_<br/>[]内のコマンド文字列は1つの文字列に連結して実行する|_--int--_<br/>プロセス識別番号|
+|***finished***|呼び出した外部コマンドの終了状態確認<br/>**async**で取得したプロセス識別番号に対して**finished**を実行<br/>  _--int@pid-- **finished**_|済み➔_--true--_<br/>実行中➔_--false--_ |
+|***sleep***|秒単位の停止<br/>  _--int@sec-- **sleep**_|なし|
+|***quit***|mysh終了<br/>***quit***|なし|
 
 
 

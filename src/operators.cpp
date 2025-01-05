@@ -1114,13 +1114,16 @@ int __opr_getinterval(MYS mys)
 	}
 	else if (ObjAny.ObjType == OTE_ARRAY)
 	{
-		PushMark(mys, false);
+		PushMark(mys, ObjAny.bExecutable);
 
 		MYS_OBJ *pObjInArray = GET_OBJINARRAY(&ObjAny);
 		for (int i = GET_INTEGER(&ObjIndex); i < GET_INTEGER(&ObjIndex) + GET_INTEGER(&ObjCount); i++)
 			PushObj(mys, &pObjInArray[i]);
 
-		iCloseArray(mys);
+		if (ObjAny.bExecutable)
+			iCloseExecArray(mys);
+		else
+			iCloseArray(mys);
 	}
 	else
 	{
@@ -1309,7 +1312,7 @@ int __opr_cvs(MYS mys)
 	case OTE_REAL:
 	{
 		char buf[128];
-		sprintf(buf, "%lf", Obj.un.dReal);
+		sprintf(buf, "%g", Obj.un.dReal);
 		PushString(mys, buf);
 		break;
 	}
